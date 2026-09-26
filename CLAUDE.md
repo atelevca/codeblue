@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-ASP.NET Core Web API (.NET 10, controllers, nullable + implicit usings enabled) for a HealthTech hackathon. The web project lives in `HealthTech/` under the `HealthTech.slnx` solution; the class library `SemanticKernel/` (medical term correction with a local LLM) is referenced by it. A recording is uploaded through the job API, gets its own folder and a record-type profile, and is then
-put through an orchestrated pipeline (WorkflowCore): normalization with FFmpeg, chunking with Silero VAD,
+ASP.NET Core Web API (.NET 10, controllers, nullable + implicit usings enabled) for a HealthTech hackathon. The web project lives in `HealthTech/` under the `HealthTech.slnx` solution; the class library `SemanticKernel/` (medical term correction with a local LLM) is referenced by it. A recording is uploaded in two phases: `POST /files` stores it in its own folder and probes it with
+ffprobe, then `POST /jobs` fills in the record card (title, speaker count, record type) and starts the
+processing. The pipeline itself is orchestrated (WorkflowCore): normalization with FFmpeg, chunking with Silero VAD,
 speech recognition (Whisper.net), speaker diarization (sherpa-onnx), speaker alignment and medical term
 correction with a local LLM. Progress is visible in percent while it runs.
 
@@ -20,7 +21,8 @@ dotnet run --project HealthTech --launch-profile http   # serves http://localhos
 
 - There is no test project and no linter configured. Verify changes by running the app and calling endpoints; sample requests are in `HealthTech/HealthTech.http`.
 - Uploading a file is multipart, which `.http` files handle poorly; use
-  `curl.exe -X POST http://localhost:5089/jobs -F "file=@assets/input/<name>.m4a" -F "profile=consilium"`.
+  `curl.exe -X POST http://localhost:5089/files -F "file=@assets/input/<name>.m4a"`, then post the
+  returned `fileId` to `/jobs` with the record card.
 - **Do NOT create any tests** — no test projects, test files, or test code. This is a project rule.
 - **No logic in controllers.** Controllers only take the request, call a service, and return its result. Validation, loops, branching, error collection, and try/catch belong in services (e.g. `HealthTech/Audio/`). Map domain exceptions to HTTP responses in an `IExceptionHandler`, not in the controller. This is a project rule.
 - OpenAPI document is mapped only in Development (`/openapi/v1.json`); Swagger UI is at `/swagger`.
@@ -52,7 +54,12 @@ code never uses it. There are no migrations — `schema.sql` is the whole schema
 create endpoint on purpose: doctors are added by editing the seed or the `.db` file directly.
 
 `Jobs` is the single source of truth for the UI; workflow steps write to it and the UI never touches
-WorkflowCore's internals.
+WorkflowCore's internals. A row carries both halves of the upload: `SizeBytes`, `Format` and
+`DurationSec` come from the ffprobe at `POST /files`, `Title`, `SpeakersCount` and `ProfileKey` from
+the record card at `POST /jobs`. `schema.sql` cannot add those columns to a database that already
+exists (`CREATE TABLE IF NOT EXISTS` is a no-op and `ALTER TABLE ADD COLUMN` is not idempotent), so
+`DatabaseInitializer` compares `PRAGMA table_info(Jobs)` against the expected set and adds what is
+missing.
 
 ## Architecture
 
@@ -63,9 +70,20 @@ WorkflowCore's internals.
 **Jobs and orchestration** (`HealthTech/Jobs/`, `HealthTech/Workflow/`):
 - Every upload becomes a job with its own folders: `assets/input/<jobId>/`, `assets/processed/<jobId>/`,
   `transcripts/<jobId>/` (`IJobPaths`). Nothing looks for "the first file in a shared folder" any more.
-- `IJobService.CreateAsync` validates the profile, saves the upload under a sanitized name
-  (`SafeFileName` strips directories and illegal characters, keeping Cyrillic and spaces), inserts the
-  `Jobs` row and starts the workflow, then returns the id immediately.
+- `IJobService.UploadAsync` saves the upload under a sanitized name (`SafeFileName` strips directories
+  and illegal characters, keeping Cyrillic and spaces), probes it with `IAudioProcessor.InspectAsync`
+  and inserts a `Jobs` row in status `Uploaded`. No workflow starts. A file that is not audio is
+  rejected here with 422 instead of failing a step a minute into processing, and the job folder is
+  removed on every failure path.
+- `IJobService.SaveRecordAsync` is the second phase: it validates the record type, checks the file is
+  still on disk (before touching the status, or the record would go to `Pending` and die on step one),
+  moves the row from `Uploaded` to `Pending` and starts the workflow. `fileId` is the job id — there is
+  no separate file entity. The move is a single `UPDATE ... WHERE Status = 'Uploaded'`, so two
+  simultaneous saves of one file yield one job and one 409, not two workflows on the same audio.
+- `Uploaded` rows are hidden from `GET /jobs` and are **not** swept by the startup pass that fails
+  orphaned jobs: a file whose form is still being filled in must survive a restart.
+- `speakersCount` is stored and returned but does not influence processing — diarization still decides
+  the speaker count itself. Values outside 1..20 are a 400.
 - Upload limits are raised to `Uploads:MaxBytes` (1 GB) on both Kestrel and the multipart form; the
   Kestrel default of 30 MB is smaller than a real recording.
 - `TranscriptionWorkflow` runs eight steps, each a `JobStep`: normalize (5%) → prepare 16 kHz mono (10%)
@@ -85,7 +103,11 @@ WorkflowCore's internals.
   resumed instance would put them back into `Running` forever.
 
 **Record profiles** (`HealthTech/Profiles/`):
-- The record type is chosen at upload and stored in `Jobs.ProfileKey`. A profile carries the Whisper
+- The record type is chosen when the record is saved (`discussionType` in `POST /jobs`, one of
+  `medical`, `administrative`, `financial`) and stored in `Jobs.ProfileKey`; the key and the
+  `discussionType` value are the same string. Only `medical` has real content — the other two run on
+  the generic `Prompts/general_correction.system.txt` with the Moldovan-speech list alone, which is
+  what keeps the corrector from translating Russian insertions into Romanian. A profile carries the Whisper
   initial prompt, the correction system prompt and the set of glossaries (`Profiles:Items` in
   `appsettings.json`). `GET /profiles` feeds the UI dropdown; an unknown key is a 400 listing the valid ones.
 - `IProfileCatalog` is a singleton that parses prompts and glossaries once at startup — `medical_glossary.txt`
@@ -137,8 +159,10 @@ WorkflowCore's internals.
 - `CorrectionValidator` rejects changed numbers, translation (Cyrillic ratio change > 0.15, letters moving between Cyrillic and Latin ≥ 2 each way, or a changed Latin/Cyrillic word-run order), >30% length change and >25% edit distance.
 
 **Controllers** (`HealthTech/Controllers/`, attribute-routed `[Route("[controller]")]`) — thin, delegate to services:
-- `JobsController` — `POST /jobs` (multipart: `file` + `profile`) → `{ jobId }`; `GET /jobs`; `GET /jobs/{id}`
-  (status, currentStep, percent, error); `GET /jobs/{id}/result` (the `.speakers.json` content).
+- `FilesController` — `POST /files` (multipart: `file`) → `{ fileId, fileName, sizeBytes, format, durationSec }`.
+- `JobsController` — `POST /jobs` (JSON: `fileId`, `title`, `speakersCount`, `discussionType`) → the record
+  card; `GET /jobs` (hides `Uploaded`); `GET /jobs/{id}` (card + status, currentStep, percent, error);
+  `GET /jobs/{id}/result` (the `.speakers.json` content).
 - `ProfilesController` — `GET /profiles` for the upload dropdown.
 - `AudioController` — `POST /audio/correctTranscript?jobId=&fileName=&profile=` → `ITranscriptCorrectionService`.
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
@@ -149,8 +173,9 @@ WorkflowCore's internals.
 
 ## Not built yet
 
-Planned in `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`, stages 4–7: per-word ASR
-confidence (`lowConfidence`) passed to the LLM, a phonetic-confusions list, the doctor directory endpoint with
-manual speaker binding (`Persons`/`SpeakerBindings` tables already exist), and the `onco` and `icu` profiles.
+Planned in `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`, stages 5–7: per-word ASR
+confidence (`lowConfidence`) passed to the LLM, a phonetic-confusions list, and the doctor directory endpoint
+with manual speaker binding (`Persons`/`SpeakerBindings` tables already exist). Glossary content for the
+administrative and financial types is deliberately empty — the mechanism is there, the words are not.
 
 No authentication: `UseAuthorization()` is called without any scheme, every endpoint is open.
