@@ -26,8 +26,8 @@ Accept: application/json
 GET {{HealthTech_HostAddress}}/jobs/{{JobId}}/result
 Accept: application/json
 
-### Повторная коррекция терминов в уже готовом файле из transcripts/
+### Повторная коррекция терминов в уже готовом артефакте задания
 # Позволяет крутить глоссарии и промпты, не переплачивая за распознавание.
-# Имя файла — без каталогов; ".json" можно опустить.
-POST {{HealthTech_HostAddress}}/audio/correctTranscript?fileName=Medpark_audio_2min.speakers.json&profile=consilium
+# Файл ищется в transcripts/<jobId>/; имя — без каталогов, ".json" можно опустить.
+POST {{HealthTech_HostAddress}}/audio/correctTranscript?jobId={{JobId}}&fileName=Medpark_audio_2min.speakers.json&profile=consilium
 Accept: application/json

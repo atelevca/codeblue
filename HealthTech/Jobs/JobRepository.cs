@@ -70,13 +70,14 @@ namespace HealthTech.Jobs
         public async Task UpdateProgressAsync(Guid id, string currentStep, int percent, CancellationToken cancellationToken = default)
         {
             using var connection = _connections.Create();
-            // Статус поднимается до Running только из Pending/Running. Из Completed и Failed
-            // возврата нет: иначе последний отчёт о прогрессе перебил бы Completed, а шаг,
-            // возобновлённый после перезапуска, воскресил бы Failed.
+            // Терминальные задания не трогаем вовсе: отчёты о прогрессе идут из коллбэков
+            // "выстрелил и забыл" на пуле потоков, поэтому запоздавший отчёт мог бы показать
+            // Completed с процентом 49 и подписью "чанк 6 из 7". MAX не даёт полосе пятиться
+            // при перестановке таких отчётов местами.
             await connection.ExecuteAsync(
-                "UPDATE Jobs SET CurrentStep = @CurrentStep, Percent = @Percent, " +
-                "Status = CASE WHEN Status IN (@Pending, @Running) THEN @Running ELSE Status END " +
-                "WHERE Id = @Id",
+                "UPDATE Jobs SET CurrentStep = @CurrentStep, Percent = MAX(Percent, @Percent), " +
+                "Status = @Running " +
+                "WHERE Id = @Id AND Status IN (@Pending, @Running)",
                 new
                 {
                     Id = id.ToString(),

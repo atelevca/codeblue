@@ -44,39 +44,59 @@ namespace HealthTech.Workflow.Steps
 
         public override async Task<ExecutionResult> RunAsync(IStepExecutionContext context)
         {
-            // Проверка строго раньше любого отчёта о прогрессе. Отчёт переводит задание в Running,
-            // поэтому шаг, возобновлённый движком после перезапуска приложения, иначе вернул бы
-            // уже помеченное Failed задание обратно в Running и оно зависло бы там навсегда.
-            if (await IsFailedAsync())
-            {
-                Logger.LogInformation("Задание {JobId} помечено Failed, шаг {Step} пропущен", JobId, StepName);
-                return ExecutionResult.Next();
-            }
-
-            await Progress.ReportAsync(JobId, StepName, PercentAtStart);
+            // Try охватывает весь метод, а не только ExecuteAsync: обращения к базе в
+            // IsFailedAsync и ReportAsync тоже могут бросить, а всё, что вылетело отсюда,
+            // движок обрабатывает сам и никто уже не запишет Failed.
             try
             {
+                // Проверка строго раньше любого отчёта о прогрессе. Отчёт переводит задание в
+                // Running, поэтому шаг, возобновлённый после перезапуска, иначе вернул бы уже
+                // помеченное Failed задание обратно в Running и оно зависло бы там навсегда.
+                if (await IsFailedAsync())
+                {
+                    Logger.LogInformation("Задание {JobId} помечено Failed, шаг {Step} пропущен", JobId, StepName);
+                    return ExecutionResult.Next();
+                }
+
+                await Progress.ReportAsync(JobId, StepName, PercentAtStart);
                 await ExecuteAsync(context);
-            }
-            catch (Exception ex) when (ex is AudioProcessingException or LlmModelNotFoundException)
-            {
-                Logger.LogWarning(ex, "Задание {JobId} упало на шаге {Step}", JobId, StepName);
-                await Jobs.UpdateStatusAsync(JobId, JobStatus.Failed, ex.Message);
+                await Progress.ReportAsync(JobId, StepName, PercentWhenDone);
                 return ExecutionResult.Next();
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Задание {JobId}: непредвиденная ошибка на шаге {Step}", JobId, StepName);
-                await Jobs.UpdateStatusAsync(JobId, JobStatus.Failed, $"{StepName}: {ex.Message}");
+                // Доменные ошибки ожидаемы и пишутся как есть; остальное - как есть плюс имя шага.
+                var expected = ex is AudioProcessingException or LlmModelNotFoundException;
+                if (expected)
+                {
+                    Logger.LogWarning(ex, "Задание {JobId} упало на шаге {Step}", JobId, StepName);
+                }
+                else
+                {
+                    Logger.LogError(ex, "Задание {JobId}: непредвиденная ошибка на шаге {Step}", JobId, StepName);
+                }
+
+                await TryMarkFailedAsync(expected ? ex.Message : $"{StepName}: {ex.Message}");
                 return ExecutionResult.Next();
             }
-
-            await Progress.ReportAsync(JobId, StepName, PercentWhenDone);
-            return ExecutionResult.Next();
         }
 
         private async Task<bool> IsFailedAsync() =>
             (await Jobs.GetAsync(JobId))?.Status == JobStatus.Failed;
+
+        // Пометка Failed - последнее, что мы можем сделать. Если и она не удалась, падать
+        // дальше некуда: исключение отсюда снова ушло бы движку и задание зависло бы в Running.
+        private async Task TryMarkFailedAsync(string error)
+        {
+            try
+            {
+                await Jobs.UpdateStatusAsync(JobId, JobStatus.Failed, error);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Задание {JobId}: не удалось записать статус Failed", JobId);
+            }
+        }
 
         protected static async Task<T> ReadJsonAsync<T>(string path)
         {

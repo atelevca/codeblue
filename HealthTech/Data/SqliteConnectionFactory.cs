@@ -19,8 +19,10 @@ namespace HealthTech.Data
             _connectionString = new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
-                Mode = SqliteOpenMode.ReadWriteCreate,
-                Cache = SqliteCacheMode.Shared
+                Mode = SqliteOpenMode.ReadWriteCreate
+                // Shared cache сознательно не включаем: он переносит конкуренцию с файла на
+                // внутренние блокировки таблиц и даёт read-uncommitted. WAL + busy_timeout ниже
+                // решают ту же задачу и ничего не меняют в семантике транзакций.
             }.ToString();
         }
 
