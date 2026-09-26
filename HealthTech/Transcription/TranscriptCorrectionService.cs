@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HealthTech.Audio;
-using Microsoft.Extensions.Options;
+using HealthTech.Jobs;
+using HealthTech.Profiles;
 using SemanticKernel.MedicalCorrection;
 
 namespace HealthTech.Transcription
@@ -18,11 +19,12 @@ namespace HealthTech.Transcription
     public interface ITranscriptCorrectionService
     {
         /// <summary>
-        /// Corrects medical terms in an existing transcript <c>&lt;transcripts&gt;/&lt;fileName&gt;</c> with the local LLM
+        /// Corrects medical terms in an existing transcript of job <paramref name="jobId"/> with the local LLM
         /// (texts are cut into sentence pieces and sent in batches). Saves <c>&lt;name&gt;.corrected.json</c> (same JSON,
-        /// only texts changed) and <c>&lt;name&gt;.medical_corrections.md</c>; the source file is not modified.
+        /// only texts changed) and <c>&lt;name&gt;.medical_corrections.md</c> next to it; the source file is not modified.
         /// </summary>
-        Task<TranscriptCorrectionResult> CorrectTranscriptAsync(string fileName, CancellationToken cancellationToken = default);
+        Task<TranscriptCorrectionResult> CorrectTranscriptAsync(
+            Guid jobId, string fileName, string profileKey, CancellationToken cancellationToken = default);
     }
 
     public class TranscriptCorrectionService : ITranscriptCorrectionService
@@ -32,24 +34,30 @@ namespace HealthTech.Transcription
 
         private readonly IProcessedAudioFiles _files;
         private readonly IMedicalTermCorrector _corrector;
-        private readonly TranscriptsOptions _transcriptsOptions;
+        private readonly IProfileCatalog _profiles;
+        private readonly IJobPaths _paths;
         private readonly ILogger<TranscriptCorrectionService> _logger;
 
         public TranscriptCorrectionService(
             IProcessedAudioFiles files,
             IMedicalTermCorrector corrector,
-            IOptions<TranscriptsOptions> transcriptsOptions,
+            IProfileCatalog profiles,
+            IJobPaths paths,
             ILogger<TranscriptCorrectionService> logger)
         {
             _files = files;
             _corrector = corrector;
-            _transcriptsOptions = transcriptsOptions.Value;
+            _profiles = profiles;
+            _paths = paths;
             _logger = logger;
         }
 
-        public async Task<TranscriptCorrectionResult> CorrectTranscriptAsync(string fileName, CancellationToken cancellationToken = default)
+        public async Task<TranscriptCorrectionResult> CorrectTranscriptAsync(
+            Guid jobId, string fileName, string profileKey, CancellationToken cancellationToken = default)
         {
-            var path = ResolvePath(fileName);
+            // Unknown key throws UnknownProfile -> 400 before the file is touched.
+            var profile = _profiles.Get(profileKey);
+            var path = ResolvePath(jobId, fileName);
             var root = await ReadAsync(path, cancellationToken);
             var items = FindItems(root, path);
 
@@ -58,16 +66,28 @@ namespace HealthTech.Transcription
                     ReadString(item, "speaker") ?? "",
                     TimeSpan.FromSeconds(ReadSeconds(item, "start")),
                     TimeSpan.FromSeconds(ReadSeconds(item, "end")),
-                    ReadString(item, "text")!))
+                    ReadString(item, "text")!)
+                {
+                    LowConfidence = ReadLowConfidence(item)
+                })
                 .ToList();
             _logger.LogInformation("Correcting medical terms in {Path}: {SegmentCount} segment(s)", path, segments.Count);
 
             var log = new CorrectionLog();
-            var corrected = await _corrector.CorrectAsync(segments, log, cancellationToken);
+            var corrected = await _corrector.CorrectAsync(segments, profile.Content, log, null, cancellationToken);
 
             for (var i = 0; i < items.Count; i++)
             {
+                if (ReadString(items[i], "text") == corrected[i].Text)
+                {
+                    continue;
+                }
+
                 items[i]["text"] = corrected[i].Text;
+                // Текст переписан - смещения указывают в старую строку, и починить их нечем.
+                // Поле убирается целиком: отсутствующее честнее указывающего не туда.
+                // То же правило работает в конвейере (CorrectTermsStep).
+                items[i].Remove("lowConfidence");
             }
             // A speaker transcript also has the whole dialogue as "text": rebuild it from the corrected turns.
             if (root["text"] is JsonValue && segments.All(s => s.Speaker.Length > 0))
@@ -75,24 +95,27 @@ namespace HealthTech.Transcription
                 root["text"] = TranscriptDialogue.Format(corrected.Select(s => (s.Speaker, s.Text)));
             }
 
-            var correctedPath = await _files.SaveJsonAsync(root, path, ".corrected.json", cancellationToken);
-            var reportPath = await _files.SaveTextAsync(log.ToMarkdown(), path, ".medical_corrections.md", cancellationToken);
+            // Результат кладётся рядом с исходником: он может лежать в каталоге задания.
+            var directory = Path.GetDirectoryName(path)!;
+            var correctedPath = await _files.SaveJsonAsync(root, directory, path, ".corrected.json", cancellationToken);
+            var reportPath = await _files.SaveTextAsync(log.ToMarkdown(), directory, path, ".medical_corrections.md", cancellationToken);
 
             return new TranscriptCorrectionResult(
                 Path.GetFileName(path), Path.GetFileName(correctedPath), Path.GetFileName(reportPath), segments.Count,
                 log.Entries.Count(e => e.Accepted), log.Entries.Count(e => !e.Accepted), log.Entries);
         }
 
-        // Only a plain file name inside the transcripts folder; ".json" may be omitted.
-        private string ResolvePath(string fileName)
+        // Только имя файла, без каталогов; ".json" можно опустить. Каталог берётся по заданию:
+        // артефакты живут в transcripts/<jobId>/, а не в корне папки транскриптов.
+        private string ResolvePath(Guid jobId, string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName) || Path.GetFileName(fileName) != fileName)
             {
                 throw new AudioProcessingException(AudioProcessingError.InvalidTranscript,
-                    $"'{fileName}' is not a file name. Pass just the name of a file in the transcripts folder, e.g. 'Medpark_audio.speakers.json'.");
+                    $"'{fileName}' is not a file name. Pass just the name of a file in the job's transcripts folder, e.g. 'Medpark_audio.speakers.json'.");
             }
 
-            var folder = _transcriptsOptions.OutputFolder;
+            var folder = _paths.TranscriptsDirectory(jobId);
             var path = Path.Combine(folder, fileName);
             if (!File.Exists(path) && !fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
                                    && File.Exists(path + ".json"))
@@ -141,6 +164,33 @@ namespace HealthTech.Transcription
 
             throw new AudioProcessingException(AudioProcessingError.InvalidTranscript,
                 $"'{Path.GetFileName(path)}' has no \"turns\" or \"segments\" with text (a diarization file can't be corrected).");
+        }
+
+        // Поле необязательное: файлы, записанные до его появления, читаются как раньше -
+        // с пустым списком, а не с ошибкой. Битый элемент пропускается, весь файл из-за
+        // одного кривого слова терять незачем.
+        private static IReadOnlyList<LowConfidenceWord> ReadLowConfidence(JsonObject item)
+        {
+            if (item["lowConfidence"] is not JsonArray array)
+            {
+                return [];
+            }
+
+            var words = new List<LowConfidenceWord>(array.Count);
+            foreach (var node in array)
+            {
+                if (node is not JsonObject word
+                    || word["at"] is not JsonValue atValue || !atValue.TryGetValue<int>(out var at)
+                    || word["word"] is not JsonValue wordValue || !wordValue.TryGetValue<string>(out var text)
+                    || string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                var p = word["p"] is JsonValue pValue && pValue.TryGetValue<double>(out var value) ? value : 0;
+                words.Add(new LowConfidenceWord(at, text, p));
+            }
+            return words;
         }
 
         private static string? ReadString(JsonObject item, string name) =>

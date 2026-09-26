@@ -1,37 +1,73 @@
 @HealthTech_HostAddress = http://localhost:5089
+@FileId = 00000000-0000-0000-0000-000000000000
 
-GET {{HealthTech_HostAddress}}/main/run
+### Типы записей для выпадашки: medical | administrative | financial
+GET {{HealthTech_HostAddress}}/profiles
 Accept: application/json
 
 ###
+# Фаза 1 — загрузка файла. Multipart из .http-файла неудобен, проще curl:
+#
+#   curl.exe -X POST http://localhost:5089/files \
+#     -F "file=@assets/input/Medpark_audio_2min.m4a"
+#
+# Ответ: { fileId, fileName, sizeBytes, format, durationSec }.
+# Обработка при этом НЕ запускается; битый файл отбивается здесь же, 422.
 
-GET {{HealthTech_HostAddress}}/audio/validateAndProcess
+### Фаза 2 — оформление записи. Именно этот запрос запускает конвейер.
+POST {{HealthTech_HostAddress}}/jobs
+Content-Type: application/json
+
+{
+  "fileId": "{{FileId}}",
+  "title": "Vizită ATI — 26 sept",
+  "speakersCount": 4,
+  "discussionType": "medical"
+}
+
+### Список записей, новые сверху. Загруженные, но не оформленные файлы сюда не попадают.
+GET {{HealthTech_HostAddress}}/jobs
 Accept: application/json
 
-###
-
-# Diarization + Whisper large-v3 on CPU: expect this to take a long time for long recordings.
-POST {{HealthTech_HostAddress}}/audio/transcribeProcessed
+### Карточка и состояние: status, currentStep, percent, error
+# currentStep внутри долгих шагов уточняется: "Распознавание: чанк 3 из 7".
+GET {{HealthTech_HostAddress}}/jobs/{{FileId}}
 Accept: application/json
 
-###
-
-# Speaker diarization only (no Whisper): speaker turns "Speaker 1", "Speaker 2", ... saved to transcripts/<name>.diarization.json.
-POST {{HealthTech_HostAddress}}/audio/diarizeProcessed
+### Результат: транскрипт со спикерами и диалогом
+GET {{HealthTech_HostAddress}}/jobs/{{FileId}}/result
 Accept: application/json
 
-###
-
-# Whisper + diarization, then each transcript segment is assigned to the speaker overlapping it most;
-# consecutive segments of one speaker are merged. Saved to transcripts/<name>.speakers.json.
-POST {{HealthTech_HostAddress}}/audio/transcribeWithSpeakers
+### Повторная коррекция терминов в уже готовом артефакте записи
+# Позволяет крутить глоссарии и промпты, не переплачивая за распознавание.
+# Файл ищется в transcripts/<jobId>/; имя — без каталогов, ".json" можно опустить.
+POST {{HealthTech_HostAddress}}/audio/correctTranscript?jobId={{FileId}}&fileName=Medpark_audio_2min.speakers.json&profile=medical
 Accept: application/json
 
-###
-
-# Medical term correction (local LLM) of an existing file in transcripts/ (".json" may be omitted).
-# Saves <name>.corrected.json and <name>.medical_corrections.md next to it; the source file is not changed.
-POST {{HealthTech_HostAddress}}/audio/correctTranscript?fileName=Medpark_audio_2min.speakers.json
+### Generate, verify against the completed transcript, and save the Romanian MOM (no body)
+POST {{HealthTech_HostAddress}}/document/save/{{FileId}}
 Accept: application/json
 
-###
+### Read saved MOM and verification report
+GET {{HealthTech_HostAddress}}/document/get/{{FileId}}
+Accept: application/json
+
+### Verify and save a full Quill getContents() snapshot (not the incremental text-change Delta)
+POST {{HealthTech_HostAddress}}/document/save/{{FileId}}
+Content-Type: application/json
+
+{
+  "delta": {
+    "ops": [
+      { "insert": "Proces-verbal" },
+      { "insert": "\n", "attributes": { "header": 1 } },
+      { "insert": "Rezumat" },
+      { "insert": "\n", "attributes": { "header": 2 } },
+      { "insert": "Discuție de lucru.\nResponsabil: Nespecificat\nTermen: Nespecificat\n" }
+    ]
+  }
+}
+
+### Download the saved MOM as PDF
+GET {{HealthTech_HostAddress}}/document/downloadpdf/{{FileId}}
+Accept: application/pdf

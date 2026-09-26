@@ -21,6 +21,10 @@ Strict rules:
 
 Input: a JSON object {"context": [...], "segments": [{"id": int, "text": string}]}.
 Items in "context" are for understanding only. Do NOT return them.
+A segment may carry a "lowConfidence" list: words the recognizer itself was unsure about, with their
+offset in the text and the probability. Start with those - they are the most likely errors. This is a
+hint, not a restriction: a clear mishearing outside the list may be fixed too, and a word in the list
+that is obviously correct must be left alone.
 After the JSON there may be two reference lists. "Reference medical terms" helps to recognize misheard
 medical words. "Normal Moldovan mixed speech" lists words that are NOT errors (for example Russian words
 written in Latin letters inside Romanian speech, or Romanian words inside Russian speech): keep them exactly
