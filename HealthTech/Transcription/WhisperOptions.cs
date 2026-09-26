@@ -36,6 +36,10 @@ namespace HealthTech.Transcription
         // Overridden by the WHISPER_GPU_DEVICE env var; forced to 0 when GGML_VK_VISIBLE_DEVICES is set (see ResolveGpuDevice).
         public int GpuDevice { get; set; } = 1;
 
+        // whisper.cpp flash attention: fewer, fused attention kernels, noticeably faster on Vulkan/Metal
+        // and lighter on memory. Off by default only because very old drivers may lack the kernels.
+        public bool UseFlashAttention { get; set; }
+
         // Forwards whisper.cpp/ggml native logs (incl. "ggml_vulkan: Found N Vulkan devices" and the chosen device)
         // to the app log at Debug verbosity. Enabled in appsettings.Development.json.
         public bool NativeLogging { get; set; }

@@ -46,8 +46,8 @@ namespace HealthTech.Transcription
                 });
             }
 
-            _logger.LogInformation("Loading Whisper model {ModelPath} (UseGpu={UseGpu}, GpuDevice={GpuDevice}, {VisibleEnv}={VisibleDevices})",
-                _options.ModelPath, _options.UseGpu, _options.GpuDevice,
+            _logger.LogInformation("Loading Whisper model {ModelPath} (UseGpu={UseGpu}, GpuDevice={GpuDevice}, FlashAttention={FlashAttention}, {VisibleEnv}={VisibleDevices})",
+                _options.ModelPath, _options.UseGpu, _options.GpuDevice, _options.UseFlashAttention,
                 WhisperOptions.VulkanVisibleDevicesEnvVar,
                 Environment.GetEnvironmentVariable(WhisperOptions.VulkanVisibleDevicesEnvVar) ?? "<not set>");
             try
@@ -56,6 +56,7 @@ namespace HealthTech.Transcription
                 {
                     UseGpu = _options.UseGpu,
                     GpuDevice = _options.GpuDevice,
+                    UseFlashAttention = _options.UseFlashAttention,
                 });
             }
             catch (Exception ex)

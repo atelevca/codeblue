@@ -36,7 +36,7 @@ The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled*
 
 ## External dependency: models
 
-Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
+Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` (CAM++ speaker embeddings; the heavier `wespeaker_en_voxceleb_resnet34_LM.onnx` gave the same turns and took 5× longer, so it is kept in the download script only as an alternative), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
 
 ## Storage
 
@@ -88,16 +88,22 @@ missing.
   the speaker count itself. Values outside 1..20 are a 400.
 - Upload limits are raised to `Uploads:MaxBytes` (1 GB) on both Kestrel and the multipart form; the
   Kestrel default of 30 MB is smaller than a real recording.
-- `TranscriptionWorkflow` (version 3) runs nine steps, each a `JobStep`: normalize (5%) → prepare 16 kHz
-  mono (10%) → VAD (15%) → transcribe (55%) → diarize (75%) → align (78%) → correct terms (90%) → save
+- `TranscriptionWorkflow` (version 4) runs eight steps, each a `JobStep`: normalize (5%) → prepare 16 kHz
+  mono (10%) → VAD (15%) → recognize speech and speakers (75%) → align (78%) → correct terms (90%) → save
   (92%) → generate minutes (100%). The number in brackets is the accumulated percent written to
   `Jobs.Percent`. The version is bumped whenever the step chain changes, because old instances stay in
   `workflow.db`.
+- `RecognizeSpeechStep` runs Whisper and diarization **in parallel** (`Task.WhenAll`): they are independent,
+  both read `Wav16kPath`, and Whisper occupies the GPU while diarization is CPU-bound, so the step costs the
+  longer of the two instead of their sum. Both services keep their own `SemaphoreSlim`, so two jobs still
+  never share a model. WorkflowCore's own `Parallel()` was not used: it schedules branches but executes the
+  pointers of one instance sequentially, so two long-running steps would not overlap.
 - Data crossing a step boundary is serialized into `workflow.db`, so `TranscriptionJobData` holds only
   paths, ids and the chunk list. The turns produced by alignment travel through `turns.json` in the job's
   transcripts folder instead, and the save step deletes it.
 - The three slow steps report progress inside their own band, so the bar keeps moving:
-  `"Распознавание: чанк 3 из 7"` (15–55%), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
+  `"Распознавание: чанк 3 из 7"` (15–70%, the last 5% of the band is left for a diarization that
+  outlives Whisper), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
   `"Генерация протокола: ..."` by phase — extracting facts (92%), writing the document (94%), checking it
   against the transcript (98%).
 - `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
@@ -162,6 +168,8 @@ missing.
   speaker. Orchestration lives in the workflow steps, not in this service.
 - Speakers are labelled `Speaker 1`, `Speaker 2`, ... in order of first appearance (sherpa cluster indices are remapped in `SherpaSpeakerDiarizationService`). No role detection (doctor/patient).
 - Whisper runs on the GPU via `Whisper.net.Runtime.Vulkan`; `Whisper.net.Runtime` (CPU) is also referenced as the fallback when no Vulkan driver is present (Whisper.net tries Vulkan before CPU). `Whisper:UseGpu` / `Whisper:GpuDevice` (default 1 = Intel Arc A370M; env `WHISPER_GPU_DEVICE` overrides) control it, and the loaded runtime is logged at model load (`Whisper runtime: Vulkan`). If `GGML_VK_VISIBLE_DEVICES` is set (launchSettings and `HealthTech/run.bat` set it to `1`), ggml renumbers the visible devices from 0, so `WhisperOptions.ResolveGpuDevice` forces `GpuDevice` = 0. `Whisper:NativeLogging` (on in Development) forwards whisper.cpp/ggml logs, incl. the `ggml_vulkan:` device list, to Serilog.
+- `Whisper:UseFlashAttention` (on) and `Whisper:BeamSize` = 2 are the speed settings: on the Arc A370M the 2-minute sample went from 93 s (beam 5, no flash attention) to 47 s with the same segments and no repetition loops. Beam 5 did not transcribe better on that sample; if loops come back on other recordings, raise `BeamSize` to 3 before touching anything else. The log line `flash attn = 1` at model load confirms the flag took effect.
+- `Diarization:NumThreads` = 8 (the P-cores of the dev laptop; all 20 logical cores oversubscribe ORT and make it slower). With CAM++ embeddings diarization of the 2-minute sample takes ~13 s instead of 68 s.
 - `WhisperSpeechRecognitionService` and `SherpaSpeakerDiarizationService` are singletons holding the loaded models; each serializes runs with a `SemaphoreSlim`. Model failures → `AudioProcessingError.ModelFailed` (500).
 - `Diarization:ExclusiveSegments` makes speaker turns non-overlapping (shorter turn wins); without it, bridged long turns swallow the other speaker.
 

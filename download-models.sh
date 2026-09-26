@@ -27,7 +27,10 @@ fetch ggml-large-v3-turbo.bin  "$WHISPER/ggml-large-v3-turbo.bin"
 # Voice activity detection.
 fetch silero_vad.onnx          "$SHERPA/asr-models/silero_vad.onnx"
 
-# Speaker embedding models (the release tag really is spelled "recongition").
+# Speaker embedding models (the release tag really is spelled "recongition"). CAM++ is the configured one:
+# a fraction of the compute of ResNet34 per segment, and diarization is CPU-bound.
+fetch 3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx \
+    "$SHERPA/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx"
 fetch wespeaker_en_voxceleb_resnet34_LM.onnx \
     "$SHERPA/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx"
 fetch 3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx \

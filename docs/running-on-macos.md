@@ -39,7 +39,7 @@ export Audio__FfprobePath=/opt/homebrew/bin/ffprobe
 |---|---|---|
 | `ggml-large-v3.bin` | Whisper large-v3 | ~3 ГБ |
 | `pyannote-segmentation-3.0.onnx` | сегментация речи | ~6 МБ |
-| `wespeaker_en_voxceleb_resnet34_LM.onnx` | эмбеддинги голосов | ~26 МБ |
+| `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` | эмбеддинги голосов (CAM++) | ~27 МБ |
 | `silero_vad.onnx` | детектор речи | ~2 МБ |
 | `qwen2.5-7b-instruct-q4_k_m.gguf` | LLM для коррекции и протокола | ~4,7 ГБ |
 

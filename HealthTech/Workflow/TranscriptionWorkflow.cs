@@ -10,9 +10,10 @@ namespace HealthTech.Workflow
 
         public string Id => WorkflowId;
 
-        // Версия 1 — каркас на заглушках; версия 2 — конвейер без протокола. Определение
-        // меняется, а старые инстансы остаются в workflow.db, поэтому номер поднимается.
-        public int Version => 3;
+        // Версия 1 — каркас на заглушках; версия 2 — конвейер без протокола; версия 3 — с протоколом;
+        // версия 4 — распознавание и диаризация одним параллельным шагом. Определение меняется,
+        // а старые инстансы остаются в workflow.db, поэтому номер поднимается.
+        public int Version => 4;
 
         public void Build(IWorkflowBuilder<TranscriptionJobData> builder)
         {
@@ -35,15 +36,12 @@ namespace HealthTech.Workflow
                     .Input(s => s.JobId, d => d.JobId)
                     .Input(s => s.Wav16kPath, d => d.Wav16kPath)
                     .Output(d => d.Chunks, s => s.Chunks)
-                .Then<TranscribeStep>()
+                .Then<RecognizeSpeechStep>()
                     .Input(s => s.JobId, d => d.JobId)
                     .Input(s => s.Wav16kPath, d => d.Wav16kPath)
                     .Input(s => s.ProfileKey, d => d.ProfileKey)
                     .Input(s => s.Chunks, d => d.Chunks)
                     .Output(d => d.TranscriptPath, s => s.TranscriptPath)
-                .Then<DiarizeStep>()
-                    .Input(s => s.JobId, d => d.JobId)
-                    .Input(s => s.Wav16kPath, d => d.Wav16kPath)
                     .Output(d => d.DiarizationPath, s => s.DiarizationPath)
                 .Then<AlignSpeakersStep>()
                     .Input(s => s.JobId, d => d.JobId)
