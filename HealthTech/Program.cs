@@ -125,6 +125,7 @@ builder.Services.AddTransient<DiarizeStep>();
 builder.Services.AddTransient<AlignSpeakersStep>();
 builder.Services.AddTransient<CorrectTermsStep>();
 builder.Services.AddTransient<SaveResultStep>();
+builder.Services.AddTransient<GenerateMinutesStep>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
