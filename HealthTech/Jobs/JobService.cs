@@ -53,35 +53,74 @@ namespace HealthTech.Jobs
             try
             {
                 Directory.CreateDirectory(inputDirectory);
-                await using var file = File.Create(sourcePath);
-                await content.CopyToAsync(file, cancellationToken);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                throw new AudioProcessingException(AudioProcessingError.FileSystemError,
-                    $"Не удалось сохранить загруженный файл в '{sourcePath}': {ex.Message}", ex);
-            }
+                await using (var file = File.Create(sourcePath))
+                {
+                    await content.CopyToAsync(file, cancellationToken);
+                }
 
-            if (new FileInfo(sourcePath).Length == 0)
+                // Пустой файл отбивается сразу, до создания задания: клиенту нечего опрашивать,
+                // а 422 честнее, чем задание, которое гарантированно упадёт на первом же шаге.
+                if (new FileInfo(sourcePath).Length == 0)
+                {
+                    throw new AudioProcessingException(AudioProcessingError.NotAudio, "Загруженный файл пуст.");
+                }
+            }
+            catch (Exception ex)
             {
-                throw new AudioProcessingException(AudioProcessingError.NotAudio, "Загруженный файл пуст.");
+                // Каталог задания уже создан, а задания не будет - убираем за собой,
+                // иначе каждая отбитая загрузка оставляет пустую папку.
+                TryDeleteDirectory(inputDirectory);
+                throw ex is AudioProcessingException
+                    ? ex
+                    : new AudioProcessingException(AudioProcessingError.FileSystemError,
+                        $"Не удалось сохранить загруженный файл в '{sourcePath}': {ex.Message}", ex);
             }
 
             await _jobs.InsertAsync(new Job(
                 jobId, safeName, profile.Key, JobStatus.Pending, null, 0, null, null,
                 DateTimeOffset.UtcNow, null), cancellationToken);
 
-            var workflowId = await _workflow.StartWorkflow(TranscriptionWorkflow.WorkflowId, new TranscriptionJobData
+            string workflowId;
+            try
             {
-                JobId = jobId,
-                ProfileKey = profile.Key,
-                SourcePath = sourcePath
-            });
+                workflowId = await _workflow.StartWorkflow(TranscriptionWorkflow.WorkflowId, new TranscriptionJobData
+                {
+                    JobId = jobId,
+                    ProfileKey = profile.Key,
+                    SourcePath = sourcePath
+                });
+            }
+            catch (Exception ex)
+            {
+                // Строка уже создана. Без этого задание навсегда осталось бы в Pending с нулевым
+                // прогрессом и пустой ошибкой, и клиент опрашивал бы его до следующего перезапуска.
+                _logger.LogError(ex, "Задание {JobId}: не удалось запустить workflow", jobId);
+                await _jobs.UpdateStatusAsync(jobId, JobStatus.Failed,
+                    $"Не удалось запустить обработку: {ex.Message}", cancellationToken);
+                throw new AudioProcessingException(AudioProcessingError.FileSystemError,
+                    $"Не удалось запустить обработку задания {jobId}: {ex.Message}", ex);
+            }
+
             await _jobs.SetWorkflowIdAsync(jobId, workflowId, cancellationToken);
 
             _logger.LogInformation("Создано задание {JobId} ({FileName}, профиль {Profile}), workflow {WorkflowId}",
                 jobId, safeName, profile.Key, workflowId);
             return jobId;
+        }
+
+        private void TryDeleteDirectory(string directory)
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "Не удалось убрать каталог отменённой загрузки {Directory}", directory);
+            }
         }
 
         public Task<Job?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>

@@ -1,5 +1,6 @@
 using HealthTech.Workflow.Steps;
 using WorkflowCore.Interface;
+using WorkflowCore.Models;
 
 namespace HealthTech.Workflow
 {
@@ -15,6 +16,12 @@ namespace HealthTech.Workflow
 
         public void Build(IWorkflowBuilder<TranscriptionJobData> builder)
         {
+            // Умолчание движка - Retry раз в 60 с без конца. Для нашего конвейера это худший
+            // исход: шаги дорогие, а сбой обычно означает отсутствующую модель или битый файл,
+            // что повтором не лечится. Terminate останавливает инстанс, а статус задания
+            // проставляет обработчик OnStepError в Program.cs.
+            builder.UseDefaultErrorBehavior(WorkflowErrorHandling.Terminate);
+
             builder
                 .StartWith<NormalizeAudioStep>()
                     .Input(s => s.JobId, d => d.JobId)

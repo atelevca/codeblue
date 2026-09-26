@@ -12,9 +12,10 @@ namespace HealthTech.Controllers
     {
         [HttpPost("correctTranscript")]
         public Task<TranscriptCorrectionResult> CorrectTranscript(
+            [FromQuery] Guid jobId,
             [FromQuery] string fileName,
             [FromQuery] string profile,
             [FromServices] ITranscriptCorrectionService transcriptCorrectionService, CancellationToken cancellationToken) =>
-            transcriptCorrectionService.CorrectTranscriptAsync(fileName, profile, cancellationToken);
+            transcriptCorrectionService.CorrectTranscriptAsync(jobId, fileName, profile, cancellationToken);
     }
 }

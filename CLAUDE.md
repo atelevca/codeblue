@@ -89,7 +89,11 @@ WorkflowCore's internals.
   initial prompt, the correction system prompt and the set of glossaries (`Profiles:Items` in
   `appsettings.json`). `GET /profiles` feeds the UI dropdown; an unknown key is a 400 listing the valid ones.
 - `IProfileCatalog` is a singleton that parses prompts and glossaries once at startup — `medical_glossary.txt`
-  is 850 lines and has no business being re-parsed per request.
+  is 850 lines and has no business being re-parsed per request. `Program.cs` resolves it eagerly so a missing
+  prompt or glossary aborts startup instead of surfacing as a 500 on the first upload.
+- A step failing outside its own try/catch — most plausibly its constructor, e.g. `KernelFactory` with no GGUF —
+  is caught by `IWorkflowHost.OnStepError`, which writes `Failed`. The workflow's default error behavior is
+  `Terminate`, not the engine's default endless 60 s retry, which would wedge the job in `Running`.
 - whisper.cpp truncates the initial prompt at roughly 224 tokens, so `WhisperPrompt` is a steering phrase
   (language, register, a handful of domain terms), never a glossary. Terminology belongs to the LLM step.
 
@@ -127,7 +131,7 @@ WorkflowCore's internals.
 - `CorrectTermsStep` corrects the aligned turns (turn index + 1 = segment id) and saves
   `<transcripts>/<jobId>/<name>.medical_corrections.md`. The system prompt and glossaries come from the
   job's profile (`RecordProfileContent`), not from hard-coded file names.
-- `ITranscriptCorrectionService` (`POST /audio/correctTranscript?fileName=...&profile=...`) runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
+- `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
 - `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
 - Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the batch text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` per file. The Moldova list is labelled as "NOT errors, keep as written".
 - `CorrectionValidator` rejects changed numbers, translation (Cyrillic ratio change > 0.15, letters moving between Cyrillic and Latin ≥ 2 each way, or a changed Latin/Cyrillic word-run order), >30% length change and >25% edit distance.
@@ -136,7 +140,7 @@ WorkflowCore's internals.
 - `JobsController` — `POST /jobs` (multipart: `file` + `profile`) → `{ jobId }`; `GET /jobs`; `GET /jobs/{id}`
   (status, currentStep, percent, error); `GET /jobs/{id}/result` (the `.speakers.json` content).
 - `ProfilesController` — `GET /profiles` for the upload dropdown.
-- `AudioController` — `POST /audio/correctTranscript?fileName=&profile=` → `ITranscriptCorrectionService`.
+- `AudioController` — `POST /audio/correctTranscript?jobId=&fileName=&profile=` → `ITranscriptCorrectionService`.
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
   `transcribeWithSpeakers`) are gone: with per-job folders "the first file in a shared directory" is meaningless.
 - `MainController` (`GET /main/run`) is a template placeholder.

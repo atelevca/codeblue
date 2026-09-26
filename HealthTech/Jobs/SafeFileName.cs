@@ -9,6 +9,7 @@ namespace HealthTech.Jobs
     public static partial class SafeFileName
     {
         private const int MaxLength = 100;
+        private const int MaxExtensionLength = 20;
 
         public static string Sanitize(string? fileName)
         {
@@ -18,8 +19,19 @@ namespace HealthTech.Jobs
 
             if (name.Length > MaxLength)
             {
+                // Расширение тоже приходит от клиента и само может быть длиннее лимита,
+                // поэтому сначала обрезаем его, а потом режем результат целиком: иначе
+                // "a." + 200 символов проскакивало мимо лимита и роняло File.Create в 500.
                 var extension = Path.GetExtension(name);
+                if (extension.Length > MaxExtensionLength)
+                {
+                    extension = extension[..MaxExtensionLength];
+                }
                 name = string.Concat(name.AsSpan(0, Math.Max(1, MaxLength - extension.Length)), extension);
+                if (name.Length > MaxLength)
+                {
+                    name = name[..MaxLength];
+                }
             }
 
             return name.Length == 0 || name.All(c => c is '.' or '_') ? "upload" : name;

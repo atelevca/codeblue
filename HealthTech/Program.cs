@@ -6,6 +6,7 @@ using HealthTech.Transcription;
 using HealthTech.Workflow;
 using HealthTech.Workflow.Steps;
 using WorkflowCore.Interface;
+using WorkflowCore.Models;
 using Microsoft.Extensions.Options;
 using SemanticKernel;
 using Serilog;
@@ -137,8 +138,31 @@ if (orphaned > 0)
     app.Logger.LogWarning("Помечено как Failed после перезапуска: {Count} задани(й)", orphaned);
 }
 
+// Каталог профилей строится сейчас, а не при первом запросе: его конструктор падает на
+// отсутствующем промпте или глоссарии, и такой сбой должен ронять старт, как валидаторы моделей,
+// а не превращаться в 500 на первой загрузке.
+app.Services.GetRequiredService<IProfileCatalog>();
+
 var workflowHost = app.Services.GetRequiredService<IWorkflowHost>();
 workflowHost.RegisterWorkflow<TranscriptionWorkflow, TranscriptionJobData>();
+
+// Последняя линия обороны. JobStep ловит всё внутри себя, но сам шаг движок собирает через DI
+// ДО вызова RunAsync, поэтому падение конструктора (например, отсутствующий GGUF в KernelFactory)
+// туда не попадает. Без этого обработчика задание осталось бы в Running навсегда.
+var jobsForErrors = app.Services.GetRequiredService<IJobRepository>();
+workflowHost.OnStepError += (workflow, step, exception) =>
+{
+    if (workflow.Data is not TranscriptionJobData data)
+    {
+        return;
+    }
+
+    app.Logger.LogError(exception, "Задание {JobId}: шаг {Step} упал мимо собственного обработчика",
+        data.JobId, step.Name);
+    _ = jobsForErrors.UpdateStatusAsync(data.JobId, JobStatus.Failed,
+        $"{step.Name}: {exception.Message}");
+};
+
 workflowHost.Start();
 app.Lifetime.ApplicationStopping.Register(() => workflowHost.Stop());
 
