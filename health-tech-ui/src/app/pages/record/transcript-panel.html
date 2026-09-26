@@ -1,0 +1,45 @@
+<div class="backdrop" (click)="closed.emit()"></div>
+<aside class="panel" role="dialog" aria-label="Transcriere">
+  <div class="panel__head">
+    <div style="min-width: 0">
+      <div class="eyebrow">Transcriere</div>
+      <div class="ellipsis panel__title">{{ title() }}</div>
+    </div>
+    <button class="btn btn--ghost panel__close" (click)="closed.emit()" aria-label="Închide">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      >
+        <path d="M3.5 3.5l7 7M10.5 3.5l-7 7"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="panel__body">
+    @if (error(); as err) {
+      <div class="panel__note">{{ err }}</div>
+    } @else if (!loaded()) {
+      <div class="panel__note">
+        <span class="dot pulse" style="background: var(--accent-2)"></span>Se încarcă transcrierea…
+      </div>
+    } @else {
+      @for (t of turns(); track $index) {
+        <div class="turn">
+          <span class="mono turn__time">{{ t.time }}</span>
+          <div style="min-width: 0">
+            <div class="turn__who">
+              <span class="dot" [style.background]="t.color"></span>{{ t.name }}
+            </div>
+            <div class="turn__text">{{ t.text }}</div>
+          </div>
+        </div>
+      } @empty {
+        <div class="panel__note">Transcrierea nu conține replici.</div>
+      }
+    }
+  </div>
+</aside>

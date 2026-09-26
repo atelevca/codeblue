@@ -19,6 +19,19 @@
       {{ title() }} · {{ readyDate() }}
     </div>
   </div>
+  <button class="btn btn--lg" (click)="transcriptOpen.set(true)">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.6"
+      stroke-linecap="round"
+    >
+      <path d="M3 4h10M3 8h10M3 12h6"></path></svg
+    >Arată transcrierea
+  </button>
   <a class="btn btn--lg" routerLink="/new">
     <svg
       width="14"
@@ -46,9 +59,18 @@
       "
     >
       <div class="doc__eyebrow mono">Proces-verbal · {{ typeLabel() }}</div>
-      @if (doc()) {
-        <button class="btn btn--ghost regen" (click)="generate()">Regenerează</button>
-      }
+      <div style="display: flex; align-items: center; gap: 10px">
+        @if (doc()) {
+          <button class="btn btn--ghost regen" (click)="generate()">Regenerează</button>
+        }
+        <div class="seg" role="group" aria-label="Limba procesului-verbal">
+          @for (l of langs; track l.code) {
+            <button [class.on]="lang() === l.code" [title]="l.label" (click)="lang.set(l.code)">
+              {{ l.label }}
+            </button>
+          }
+        </div>
+      </div>
     </div>
 
     <div class="doc__title">{{ title() }}</div>
@@ -162,36 +184,6 @@
         </div>
       }
     }
-
-    <div class="sep"></div>
-
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
-      <div class="eyebrow">Transcriere</div>
-      @if (result(); as r) {
-        <button class="btn btn--ghost regen" (click)="transcriptOpen.set(!transcriptOpen())">
-          {{ transcriptOpen() ? 'Ascunde' : 'Arată ' + r.turns.length + ' replici' }}
-        </button>
-      }
-    </div>
-    @if (resultError(); as err) {
-      <div style="color: var(--text-3); margin-top: 10px">{{ err }}</div>
-    } @else if (!result()) {
-      <div class="loading">Se încarcă transcrierea…</div>
-    } @else if (transcriptOpen()) {
-      <div style="margin-top: 8px">
-        @for (t of turns(); track $index) {
-          <div class="turn">
-            <span class="mono turn__time">{{ t.time }}</span>
-            <div style="min-width: 0">
-              <div class="turn__who">
-                <span class="dot" [style.background]="t.color"></span>{{ t.name }}
-              </div>
-              <div class="turn__text">{{ t.text }}</div>
-            </div>
-          </div>
-        }
-      </div>
-    }
   </article>
 
   <div class="side">
@@ -278,5 +270,15 @@
     [docText]="plainText()"
     (closed)="emailOpen.set(false)"
     (openMapping)="openMappingFromEmail()"
+  />
+}
+
+@if (transcriptOpen()) {
+  <app-transcript-panel
+    [title]="title()"
+    [turns]="turns()"
+    [loaded]="!!result()"
+    [error]="resultError()"
+    (closed)="transcriptOpen.set(false)"
   />
 }
