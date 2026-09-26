@@ -1,0 +1,3 @@
+# Скрипты для macOS/Linux должны оставаться с LF даже при core.autocrlf=true на Windows:
+# с CRLF bash падает на первой же строке ("/usr/bin/env: 'bash\r'").
+*.sh text eol=lf

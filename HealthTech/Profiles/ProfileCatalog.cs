@@ -22,6 +22,8 @@ namespace HealthTech.Profiles
             "Reference medical terms (use only to recognize misheard words):";
         private const string SpeechGlossaryHeading =
             "Normal Moldovan mixed speech (NOT errors, keep these words exactly as written; use only to understand the sentence):";
+        private const string PhoneticHeading =
+            "Known ASR mishearings (left = what the recognizer produces, right = the correct form):";
 
         private readonly Dictionary<string, RecordProfile> _profiles;
 
@@ -70,10 +72,11 @@ namespace HealthTech.Profiles
                 : throw new AudioProcessingException(AudioProcessingError.UnknownProfile,
                     $"Неизвестный тип записи '{key}'. Доступные: {string.Join(", ", _profiles.Keys)}.");
 
-        // Список "нормальной речи" помечается иначе: это не термины, а слова, которые нельзя трогать.
+        // Списки подключаются одинаково, но означают разное, поэтому и заголовки разные:
+        // термины - что искать, нормальная речь - что не трогать, фонетика - что чем заменять.
         private static string HeadingFor(string fileName) =>
-            fileName.Contains("moldova_speech", StringComparison.OrdinalIgnoreCase)
-                ? SpeechGlossaryHeading
-                : MedicalGlossaryHeading;
+            fileName.Contains("phonetic", StringComparison.OrdinalIgnoreCase) ? PhoneticHeading
+            : fileName.Contains("moldova_speech", StringComparison.OrdinalIgnoreCase) ? SpeechGlossaryHeading
+            : MedicalGlossaryHeading;
     }
 }

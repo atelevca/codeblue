@@ -71,3 +71,20 @@ Content-Type: application/json
 ### Download the saved MOM as PDF
 GET {{HealthTech_HostAddress}}/document/downloadpdf/{{FileId}}
 Accept: application/pdf
+
+### Справочник врачей для выпадашки привязки
+GET {{HealthTech_HostAddress}}/persons
+Accept: application/json
+
+### Привязать говорящих к врачам. Список заменяет прежний целиком.
+PUT {{HealthTech_HostAddress}}/jobs/{{FileId}}/speakers
+Content-Type: application/json
+
+[
+  { "label": "Speaker 1", "personId": "11111111-1111-1111-1111-111111111111" },
+  { "label": "Speaker 2", "personId": "22222222-2222-2222-2222-222222222222" }
+]
+
+### Диалог с подставленными именами. Файлы транскриптов при этом не меняются.
+GET {{HealthTech_HostAddress}}/jobs/{{FileId}}/transcript
+Accept: application/json

@@ -31,6 +31,7 @@ namespace HealthTech.Transcription
     {
         // Speaker transcripts keep their items in "turns", plain transcripts in "segments".
         private static readonly string[] ItemArrays = ["turns", "segments"];
+        private static readonly JsonSerializerOptions LowConfidenceJson = new(JsonSerializerDefaults.Web);
 
         private readonly IProcessedAudioFiles _files;
         private readonly IMedicalTermCorrector _corrector;
@@ -84,10 +85,16 @@ namespace HealthTech.Transcription
                 }
 
                 items[i]["text"] = corrected[i].Text;
-                // Текст переписан - смещения указывают в старую строку, и починить их нечем.
-                // Поле убирается целиком: отсутствующее честнее указывающего не туда.
-                // То же правило работает в конвейере (CorrectTermsStep).
-                items[i].Remove("lowConfidence");
+                // Корректор пересчитал смещения под новый текст (слова переписанных кусков
+                // отброшены). То же правило работает в конвейере (CorrectTermsStep).
+                if (corrected[i].LowConfidence.Count > 0)
+                {
+                    items[i]["lowConfidence"] = JsonSerializer.SerializeToNode(corrected[i].LowConfidence, LowConfidenceJson);
+                }
+                else
+                {
+                    items[i].Remove("lowConfidence");
+                }
             }
             // A speaker transcript also has the whole dialogue as "text": rebuild it from the corrected turns.
             if (root["text"] is JsonValue && segments.All(s => s.Speaker.Length > 0))
