@@ -201,7 +201,14 @@ if (app.Environment.IsDevelopment())
 // До UseHttpsRedirection: preflight OPTIONS должен получить ответ здесь, а не редирект.
 app.UseCors(UiCorsPolicy);
 
-app.UseHttpsRedirection();
+// В Development редиректа нет. UI ходит через прокси дев-сервера на http://localhost:5089, а профиль
+// https из Visual Studio слушает тот же порт и отвечал бы 307 на https://localhost:7059. Для GET это
+// лишний круг и CORS на чужом origin; для multipart POST /files хуже: Kestrel отвечает 307, не дочитав
+// тело, и рвёт соединение, пока прокси ещё передаёт файл, и браузер видит ERR_CONNECTION_RESET.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 
