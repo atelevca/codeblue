@@ -24,7 +24,10 @@ bool consistent = verification.IsConsistent;
    (inclusiv tabelul acțiunilor) direct cu transcriptul original. Raportul în română
    conține concluzia și discrepanțele: afirmații fără suport, omisiuni și contradicții,
    cu citate exacte și corectări sugerate. Citatele sunt verificate în cod față de
-   sursele primite. `IsConsistent` este adevărat numai când lista discrepanțelor este goală.
+   sursele primite, tolerând spațiile, majusculele, ş/ș, ţ/ț și ghilimelele tipografice; citatul
+   returnat este fragmentul exact din sursă. O constatare al cărei citat nu se regăsește este
+   eliminată și numărată în `DiscardedFindings`, fără a anula restul verificării.
+   `IsConsistent` este adevărat numai când nu există discrepanțe și nicio constatare eliminată.
    Discrepanțele sunt returnate pentru revizuire; documentul nu este rescris automat.
    Verificarea separată este disponibilă prin `VerifyMinutesAsync(transcript, markdown)`.
 
