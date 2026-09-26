@@ -40,6 +40,13 @@ namespace HealthTech.Workflow.Steps
         protected abstract int PercentAtStart { get; }
         protected abstract int PercentWhenDone { get; }
 
+        /// <summary>
+        /// Последний шаг конвейера переводит задание в Completed. Делает это базовый класс,
+        /// а не сам шаг: UpdateProgressAsync намеренно не трогает терминальные задания, поэтому
+        /// отметить 100% нужно строго до смены статуса, иначе полоса замрёт на 98%.
+        /// </summary>
+        protected virtual bool CompletesJob => false;
+
         protected abstract Task ExecuteAsync(IStepExecutionContext context);
 
         public override async Task<ExecutionResult> RunAsync(IStepExecutionContext context)
@@ -61,6 +68,10 @@ namespace HealthTech.Workflow.Steps
                 await Progress.ReportAsync(JobId, StepName, PercentAtStart);
                 await ExecuteAsync(context);
                 await Progress.ReportAsync(JobId, StepName, PercentWhenDone);
+                if (CompletesJob)
+                {
+                    await Jobs.UpdateStatusAsync(JobId, JobStatus.Completed, null);
+                }
                 return ExecutionResult.Next();
             }
             catch (Exception ex)

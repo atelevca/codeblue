@@ -22,6 +22,8 @@ namespace HealthTech.Workflow.Steps
         public string DiarizationPath { get; set; } = "";
         public string SpeakersPath { get; set; } = "";
 
+        protected override bool CompletesJob => true;
+
         protected override string StepName => "Сохранение результата";
         protected override int PercentAtStart => 98;
         protected override int PercentWhenDone => 100;
@@ -47,7 +49,6 @@ namespace HealthTech.Workflow.Steps
             SpeakersPath = await _files.SaveJsonAsync(result, directory, TranscriptPath, ".speakers.json");
 
             File.Delete(turnsPath);
-            await Jobs.UpdateStatusAsync(JobId, JobStatus.Completed, null);
         }
     }
 }
