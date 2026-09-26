@@ -10,9 +10,9 @@ namespace HealthTech.Workflow
 
         public string Id => WorkflowId;
 
-        // Версия 1 — каркас на заглушках; определение изменилось, а старые инстансы
-        // остались в workflow.db, поэтому номер поднят.
-        public int Version => 2;
+        // Версия 1 — каркас на заглушках; версия 2 — конвейер без протокола. Определение
+        // меняется, а старые инстансы остаются в workflow.db, поэтому номер поднимается.
+        public int Version => 3;
 
         public void Build(IWorkflowBuilder<TranscriptionJobData> builder)
         {
@@ -57,7 +57,9 @@ namespace HealthTech.Workflow
                     .Input(s => s.JobId, d => d.JobId)
                     .Input(s => s.TranscriptPath, d => d.TranscriptPath)
                     .Input(s => s.DiarizationPath, d => d.DiarizationPath)
-                    .Output(d => d.SpeakersPath, s => s.SpeakersPath);
+                    .Output(d => d.SpeakersPath, s => s.SpeakersPath)
+                .Then<GenerateMinutesStep>()
+                    .Input(s => s.JobId, d => d.JobId);
         }
     }
 }

@@ -26,7 +26,7 @@ namespace HealthTech.Workflow.Steps
         }
 
         private const int BandStart = 78;
-        private const int BandEnd = 98;
+        private const int BandEnd = 90;
 
         public string ProfileKey { get; set; } = "";
         public string TranscriptPath { get; set; } = "";

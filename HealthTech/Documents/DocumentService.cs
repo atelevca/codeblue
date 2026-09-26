@@ -30,6 +30,24 @@ public sealed class DocumentService(
         var job = await RequireJobAsync(jobId, ct);
         if (job.Status != JobStatus.Completed)
             throw new DocumentException(409, "Transcrierea jobului nu este finalizată.");
+        return await SaveCoreAsync(jobId, request, null, ct);
+    }
+
+    /// <summary>
+    /// Вход для шага конвейера. От SaveAsync отличается ровно одним: не требует статуса
+    /// Completed. На этом шаге задание ещё Running - в Completed его переводит сам шаг,
+    /// после того как протокол сохранён.
+    /// </summary>
+    public async Task<SavedDocument> GenerateAsync(
+        Guid jobId, IProgress<DocumentPhase>? phase = null, CancellationToken ct = default)
+    {
+        await RequireJobAsync(jobId, ct);
+        return await SaveCoreAsync(jobId, null, phase, ct);
+    }
+
+    private async Task<SavedDocument> SaveCoreAsync(
+        Guid jobId, SaveDocumentRequest? request, IProgress<DocumentPhase>? phase, CancellationToken ct)
+    {
         if (request != null && request.Delta == null)
             throw new DocumentException(400, "Delta este obligatoriu. Omiteți corpul cererii pentru generare.");
         var editedMarkdown = request == null ? null : QuillDocument.ToMarkdown(request.Delta);
@@ -46,7 +64,9 @@ public sealed class DocumentService(
             {
                 if (request == null)
                 {
+                    phase?.Report(DocumentPhase.ExtractingFacts);
                     var facts = await generator.Value.ExtractFactsAsync(transcript, ct);
+                    phase?.Report(DocumentPhase.Generating);
                     var generated = await generator.Value.GenerateMinutesAsync(facts, ct);
                     delta = QuillDocument.FromMarkdown(generated);
                     markdown = QuillDocument.ToMarkdown(delta);
@@ -56,6 +76,7 @@ public sealed class DocumentService(
                     delta = request.Delta;
                     markdown = editedMarkdown!;
                 }
+                phase?.Report(DocumentPhase.Verifying);
                 verification = await VerifyOrNoteAsync(transcript, markdown, ct);
             }
             catch (ArgumentException ex)
