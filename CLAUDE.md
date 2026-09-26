@@ -16,7 +16,8 @@ Run from the repo root (or `HealthTech/`):
 
 ```sh
 dotnet build                                   # build
-dotnet run --project HealthTech --launch-profile http   # serves http://localhost:5089
+dotnet run --project HealthTech --launch-profile http   # Windows: serves http://localhost:5089
+HealthTech/run.sh                                       # macOS: same, profile "mac" (Metal)
 ```
 
 - There is no test project and no linter configured. Verify changes by running the app and calling endpoints; sample requests are in `HealthTech/HealthTech.http`.
@@ -30,11 +31,11 @@ dotnet run --project HealthTech --launch-profile http   # serves http://localhos
 
 ## External dependency: FFmpeg
 
-The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`). Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
+The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the Windows dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`), on macOS via `brew install ffmpeg`. macOS setup is in `docs/running-on-macos.md`. Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
 
 ## External dependency: models
 
-Transcription models are **not downloaded by the app** — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
+Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
 
 ## Storage
 
