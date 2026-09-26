@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- All LLamaSharp packages must have the same version. -->
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.semantic-kernel" Version="0.27.0" />
+    <!--
+      CPU backend. For an NVIDIA GPU, replace it with LLamaSharp.Backend.Cuda12 (same version, CUDA 12 runtime
+      required) and set Llm:GpuLayerCount (e.g. -1 or 99 = all layers) in appsettings.llm.json.
+    -->
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.80.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.llm.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Prompts\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Glossary\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

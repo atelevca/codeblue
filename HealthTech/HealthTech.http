@@ -28,3 +28,10 @@ POST {{HealthTech_HostAddress}}/audio/transcribeWithSpeakers
 Accept: application/json
 
 ###
+
+# Medical term correction (local LLM) of an existing file in transcripts/ (".json" may be omitted).
+# Saves <name>.corrected.json and <name>.medical_corrections.md next to it; the source file is not changed.
+POST {{HealthTech_HostAddress}}/audio/correctTranscript?fileName=Medpark_audio_2min.speakers.json
+Accept: application/json
+
+###

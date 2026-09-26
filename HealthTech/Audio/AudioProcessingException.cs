@@ -8,7 +8,8 @@ namespace HealthTech.Audio
         FfmpegUnavailable,
         ConversionFailed,
         FileSystemError,
-        ModelFailed
+        ModelFailed,
+        InvalidTranscript
     }
 
     public class AudioProcessingException : Exception

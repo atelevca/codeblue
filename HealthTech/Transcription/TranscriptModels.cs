@@ -38,6 +38,13 @@ namespace HealthTech.Transcription
         long TranscriptionMs,
         long DiarizationMs);
 
+    internal static class TranscriptDialogue
+    {
+        // "Speaker 1:" / text / blank line / "Speaker 2:" / text ...
+        public static string Format(IEnumerable<(string Speaker, string Text)> turns) =>
+            string.Join("\n\n", turns.Select(t => t.Speaker + ":\n" + t.Text));
+    }
+
     internal static class TranscriptTime
     {
         // mm:ss; minutes keep counting past 59 instead of wrapping into hours.

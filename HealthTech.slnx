@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HealthTech/HealthTech.csproj" />
+  <Project Path="SemanticKernel/SemanticKernel.csproj" />
+</Solution>

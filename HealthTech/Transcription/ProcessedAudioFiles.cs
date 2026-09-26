@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using HealthTech.Audio;
@@ -12,6 +13,9 @@ namespace HealthTech.Transcription
 
         /// <summary>Saves <paramref name="result"/> as <c>&lt;transcripts&gt;/&lt;source name&gt;&lt;suffix&gt;</c> and returns the path.</summary>
         Task<string> SaveJsonAsync<T>(T result, string sourcePath, string suffix, CancellationToken cancellationToken = default);
+
+        /// <summary>Saves <paramref name="text"/> as <c>&lt;transcripts&gt;/&lt;source name&gt;&lt;suffix&gt;</c> (UTF-8) and returns the path.</summary>
+        Task<string> SaveTextAsync(string text, string sourcePath, string suffix, CancellationToken cancellationToken = default);
     }
 
     public class ProcessedAudioFiles : IProcessedAudioFiles
@@ -59,7 +63,15 @@ namespace HealthTech.Transcription
                        $"No audio files ({string.Join(", ", AudioExtensions)}) found in '{directory}'. Run GET /audio/validateAndProcess first.");
         }
 
-        public async Task<string> SaveJsonAsync<T>(T result, string sourcePath, string suffix, CancellationToken cancellationToken = default)
+        public Task<string> SaveJsonAsync<T>(T result, string sourcePath, string suffix, CancellationToken cancellationToken = default) =>
+            SaveAsync(sourcePath, suffix,
+                async stream => await JsonSerializer.SerializeAsync(stream, result, JsonOptions, cancellationToken));
+
+        public Task<string> SaveTextAsync(string text, string sourcePath, string suffix, CancellationToken cancellationToken = default) =>
+            SaveAsync(sourcePath, suffix,
+                async stream => await stream.WriteAsync(Encoding.UTF8.GetBytes(text), cancellationToken));
+
+        private async Task<string> SaveAsync(string sourcePath, string suffix, Func<Stream, Task> write)
         {
             var outputFolder = _transcriptsOptions.OutputFolder;
             var outputPath = Path.Combine(outputFolder, Path.GetFileNameWithoutExtension(sourcePath) + suffix);
@@ -68,7 +80,7 @@ namespace HealthTech.Transcription
             {
                 Directory.CreateDirectory(outputFolder);
                 await using var stream = File.Create(outputPath);
-                await JsonSerializer.SerializeAsync(stream, result, JsonOptions, cancellationToken);
+                await write(stream);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

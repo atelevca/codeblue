@@ -1,6 +1,7 @@
 using HealthTech.Audio;
 using HealthTech.Transcription;
 using Microsoft.Extensions.Options;
+using SemanticKernel;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,9 +64,15 @@ builder.Services.AddSingleton<IVoiceActivityService, SileroVoiceActivityService>
 builder.Services.AddSingleton<IProcessedAudioTranscriptionService, ProcessedAudioTranscriptionService>();
 builder.Services.AddSingleton<IProcessedAudioDiarizationService, ProcessedAudioDiarizationService>();
 builder.Services.AddSingleton<IProcessedAudioSpeakerTranscriptService, ProcessedAudioSpeakerTranscriptService>();
+builder.Services.AddSingleton<ITranscriptCorrectionService, TranscriptCorrectionService>();
+
+// Local LLM (LLamaSharp + Semantic Kernel) for medical term correction; defaults in appsettings.llm.json, "Llm" section overrides.
+// The GGUF model is checked when the speaker transcript service is first used, not at startup.
+builder.Services.AddMedicalTermCorrection(builder.Configuration);
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
+builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
 
 var app = builder.Build();
 

@@ -1,0 +1,387 @@
+# MOLDOVA SPEECH GLOSSARY — how people really speak (Romanian + Russian + English mix)
+#
+# IMPORTANT FOR THE MODEL:
+# The words below are NOT recognition errors. They are normal speech in Moldova.
+# - Keep them exactly as spoken. Do NOT replace them with "standard" Romanian or Russian.
+# - Do NOT translate them. A Russian word inside a Romanian sentence stays Russian, and vice versa.
+# - The ASR may write a Russian word in Latin letters (davlenie) or in Cyrillic (давление). Keep the script it used.
+# - Use this list only to UNDERSTAND the sentence and to recognize a word the ASR garbled.
+#
+# Format: as heard (Latin spelling) | original | meaning in standard Romanian | English
+
+## 1. Russian discourse words inside Romanian speech / Русские слова-связки в румынской речи
+davai | давай | hai, bine, de acord | come on, OK
+nu davai | ну давай | hai, bine atunci | OK then
+davai-davai | давай-давай | repede, hai | hurry up
+coroce, koroce | короче | pe scurt | in short
+coroce govorea | короче говоря | pe scurt | to put it short
+vobșe, voobșe | вообще | în general; deloc | in general; at all
+voobșe-to | вообще-то | de fapt | actually
+v obșem | в общем | în general | overall
+v principe | в принципе | în principiu | in principle
+sobstvenno | собственно | de fapt | as a matter of fact
+tipa | типа | cam, ca și cum | like, sort of
+vrode | вроде | parcă | seemingly
+kak bî | как бы | parcă | kind of
+znacit | значит | deci | so
+tak | так | așa; deci | so
+tac cto | так что | așa că | so that
+to est | то есть | adică | that is
+nu vot | ну вот | ei bine, iată | well
+nu i vot | ну и вот | și iată | and so
+vot | вот | iată | here, there you go
+slușai | слушай | ascultă | listen
+ponimaeși | понимаешь | înțelegi | you see
+predstavleaeși | представляешь | îți imaginezi | can you imagine
+poniatno | понятно | clar, am înțeles | got it
+iasno | ясно | clar | clear
+normalno | нормально | bine, normal | fine
+horoșo | хорошо | bine | good
+conecino | конечно | desigur | of course
+tocino | точно | sigur, exact | exactly
+ladno | ладно | bine, fie | alright
+nu ladno | ну ладно | fie | fine then
+prosto | просто | pur și simplu | just, simply
+uje | уже | deja | already
+eșcio, ișcio | ещё | încă | still, more
+toje | тоже | și, de asemenea | also
+pravilno | правильно | corect | right, correct
+imenno | именно | anume | exactly
+naoborot | наоборот | dimpotrivă | on the contrary
+sovsem | совсем | cu totul | completely
+ciut-ciut | чуть-чуть | puțin | a little
+nu i ce | ну и что | și ce | so what
+mojet | может | poate | maybe
+navernoe | наверное | probabil | probably
+kajetsea | кажется | se pare | it seems
+nado | надо | trebuie | need to
+libo | либо | sau | or
+priciom | причём | în plus, mai mult | moreover
+cstati | кстати | apropo | by the way
+ne znaiu | не знаю | nu știu | I don't know
+nicego | ничего | nimic; nu-i nimic | nothing; it's fine
+spasibo | спасибо | mulțumesc | thank you
+izvinite | извините | scuzați | excuse me
+blin | блин | (interjecție) | damn
+vsio | всё | gata, tot | that's it
+
+## 2. Russian everyday words inside Romanian speech / Русские бытовые слова в румынской речи
+podrugă | подруга | prietenă; iubită | female friend; girlfriend
+drug | друг | prieten | friend
+paren | парень | băiat; iubit | guy; boyfriend
+devușcă | девушка | fată; iubită | girl; girlfriend
+ribiata | ребята | băieți, voi | guys
+mujic | мужик | bărbat | man, guy
+jena | жена | soție | wife
+muj | муж | soț | husband
+rebionoc | ребёнок | copil | child
+babușca | бабушка | bunică | grandmother
+diadea | дядя | unchi; bărbat necunoscut | uncle; man
+tiotea | тётя | mătușă; femeie necunoscută | aunt; woman
+sosed | сосед | vecin | neighbor
+nacealnic | начальник | șef | boss
+nacealstvo | начальство | conducere | management, bosses
+na rabote | на работе | la serviciu | at work
+smenă | смена | tură | shift
+pereriv | перерыв | pauză | break
+otpusc | отпуск | concediu | vacation
+zarplată | зарплата | salariu | salary
+dengi | деньги | bani | money
+sdaci | сдача | rest | change (money)
+remont | ремонт | reparație, renovare | repair, renovation
+spravcă | справка | certificat, adeverință | certificate
+bumagi | бумаги | acte, documente | papers
+cvartiră | квартира | apartament | apartment
+dacea | дача | casă la țară, vilă | summer house
+ogorod | огород | grădină de legume | vegetable garden
+pachet, pacet | пакет | pungă | plastic bag
+sumcă | сумка | geantă | bag
+coșelioc | кошелёк | portofel | wallet
+cliuci | ключи | chei | keys
+tapocichi | тапочки | papuci | slippers
+crujcă | кружка | cană | mug
+banca | банка | borcan | jar
+stolovaia | столовая | cantină | canteen
+vahtior | вахтёр | portar | doorman
+ohrana | охрана | pază | security
+marșrutcă | маршрутка | microbuz | minibus
+ostanovcă | остановка | stație | bus stop
+probcă | пробка | ambuteiaj | traffic jam
+zapravcă | заправка | benzinărie | gas station
+zakaz | заказ | comandă | order
+dostavcă | доставка | livrare | delivery
+nomer | номер | număr (de telefon) | phone number
+a zvoni | звонить | a suna | to call
+sviazi | связь | legătură, semnal | connection, signal
+
+## 3. Russian hospital and medical jargon inside Romanian speech / Больничный жаргон
+### Places and people
+vraci | врач | medic | doctor
+doftor | — (regional) | medic | doctor (colloquial)
+bolniță | больница | spital | hospital
+stacionar | стационар | staționar, spital | inpatient hospital
+dispanser | диспансер | dispensar | specialized outpatient center
+policlinică | поликлиника | policlinică, CMF | outpatient clinic
+ciastnaia clinica | частная клиника | clinică privată | private clinic
+scoraia, scoraia pomoșci | скорая (помощь) | ambulanță | ambulance
+priomnîi, priomnoe | приёмный покой | secția de internări, urgență | admission department
+reanimație, reanimare | реанимация | ATI, terapie intensivă | intensive care
+palată | палата | salon (de spital) | hospital ward
+otdelenie | отделение | secție | department
+procedurnaia | процедурная | sala de proceduri | treatment room
+operaționnaia | операционная | sala de operație | operating room
+perevezocinaia | перевязочная | sala de pansamente | dressing room
+ordinatorscaia | ординаторская | camera medicilor | doctors' room
+post | пост (медсестры) | postul asistentei | nurse station
+zaveduiușcii | заведующий | șef de secție | head of department
+glavvraci | главврач | medic-șef, director medical | chief physician
+ordinator | ординатор | medic ordinator, medic de secție | ward doctor
+uciastcovîi | участковый (врач) | medic de familie de sector | district doctor
+sestra, medsestra | медсестра | asistentă medicală | nurse
+sanitarcă | санитарка | infirmieră | orderly
+felcer | фельдшер | felcer, asistent medical | paramedic
+terapevt | терапевт | medic internist | general physician
+hirurg | хирург | chirurg | surgeon
+nevropatolog | невропатолог | neurolog | neurologist
+ginecolog | гинеколог | ginecolog | gynecologist
+lor | лор | medic ORL | ENT doctor
+
+### Organisation and paperwork
+dejurstvo | дежурство | gardă | on-call shift
+dejurnîi | дежурный | medic de gardă | doctor on call
+obhod | обход | vizita, contravizita | ward round
+planiorcă | планёрка | raportul de dimineață | morning meeting
+a sobrati consilium | собрать консилиум | a convoca consiliul medical | to call a consilium
+istoria bolezni | история болезни | foaia de observație | medical record
+cartocica | карточка | fișa medicală | patient card
+taloncic | талончик | bon de programare | appointment slip
+zapisi | запись | programare | appointment booking
+priom | приём | consultație | appointment
+ocered | очередь | rând | queue
+napravlenie | направление | trimitere | referral
+recept | рецепт | rețetă | prescription
+platno | платно | contra plată | paid
+bolnicinîi | больничный | certificat de concediu medical | sick leave certificate
+invalidnosti, gruppa | инвалидность, группа | grad de dizabilitate | disability, disability grade
+perevod | перевод | transfer (în altă secție) | transfer
+vîpiscă | выписка | extras, epicriză de externare | discharge summary
+a vîpisa | выписать | a externa; a prescrie | to discharge; to prescribe
+vîpisca domoi | выписка домой | externare la domiciliu | discharge home
+
+### Procedures and supplies
+ucol | укол | injecție | injection
+capelniță | капельница | perfuzie | IV drip
+sistemă | система | perfuzie | IV drip
+șprit | шприц | seringă | syringe
+bint | бинт | fașă, bandaj | bandage
+jgut | жгут | garou | tourniquet
+catetor | катетер | cateter | catheter
+zond | зонд | sondă | tube
+perevezcă | перевязка | pansament | dressing
+șov | шов | sutură | suture
+gradusnic | градусник | termometru | thermometer
+tabletcă, tabletki | таблетка | comprimat, pastilă | tablet, pill
+narcoz | наркоз | anestezie generală | general anesthesia
+operațiia | операция | operație | surgery
+promîvanie | промывание (желудка) | spălătură gastrică | gastric lavage
+clizma | клизма | clismă | enema
+gorcicinichi | горчичники | cataplasme cu muștar | mustard plasters
+
+### Tests
+UZI | УЗИ | ecografie, USG | ultrasound
+rentghen | рентген | radiografie | X-ray
+fliuorografie | флюорография | fluorografie | chest fluorography
+cardiogramă | кардиограмма | ECG | ECG
+analiz crovi | анализ крови | analiza sângelui | blood test
+crovi iz venî | кровь из вены | sânge din venă | venous blood
+crovi iz palța | кровь из пальца | sânge din deget | finger-prick blood
+analiz mocii | анализ мочи | analiza urinei | urine test
+analiz cala | анализ кала | analiza materiilor fecale | stool test
+banocicichi | баночки | recipiente pentru analize | sample jars
+natoșcac | натощак | pe nemâncate | fasting
+
+### Symptoms and patient words
+davlenie | давление | tensiune arterială | blood pressure
+davlenie scacet | давление скачет | tensiunea fluctuează | blood pressure fluctuates
+davlenie podnealosi | давление поднялось | a crescut tensiunea | blood pressure went up
+sahar | сахар | glicemie, zahăr în sânge | blood sugar
+sahar podnealsea | сахар поднялся | a crescut glicemia | blood sugar went up
+serdțe prihvatilo | сердце прихватило | l-a apucat inima | sudden heart pain
+golova cruitsea | голова кружится | amețeală | dizziness
+toșnit | тошнит | greață | nausea
+rvota | рвота | vomă | vomiting
+ponos | понос | diaree | diarrhea
+izjoga | изжога | arsuri la stomac | heartburn
+otiok | отёк | edem, umflătură | swelling
+sîpi | сыпь | erupție | rash
+cașeli | кашель | tuse | cough
+nasmorc | насморк | guturai, rinoree | runny nose
+prostuda | простуда | răceală | common cold
+anghina | ангина | amigdalită | tonsillitis
+radiculit | радикулит | lombalgie, radiculopatie | sciatica, back pain
+osteohondroz | остеохондроз | osteocondroză | osteochondrosis
+VSD | ВСД | distonie vegetativă | vegetative dystonia (post-Soviet diagnosis)
+
+### Patient condition
+sostoianie tiajeloe | состояние тяжёлое | stare gravă | serious condition
+sostoianie stabilinoe | состояние стабильное | stare stabilă | stable condition
+v soznanii | в сознании | conștient | conscious
+bez soznania | без сознания | inconștient | unconscious
+pod nabliudeniem | под наблюдением | sub supraveghere | under observation
+a vîzvati scoruiu | вызвать скорую | a chema ambulanța | to call an ambulance
+
+## 4. Romanian words inside Russian speech / Румынские слова в русской речи
+### Medical and official
+спитал | spital | больница | hospital
+секция | secție | отделение | hospital department
+салон | salon | палата | hospital ward
+гардэ | gardă | дежурство | on-call shift
+медик де гардэ | medic de gardă | дежурный врач | doctor on call
+асистента | asistentă | медсестра | nurse
+инфирмиера | infirmieră | санитарка | orderly
+медик де фамилие | medic de familie | семейный врач | family doctor
+тримитере | trimitere | направление | referral
+ретета | rețetă | рецепт | prescription
+компенсат | compensat | компенсированное лекарство | reimbursed drug
+програмаре | programare | запись на приём | appointment
+интернаре | internare | госпитализация | admission
+екстернаре | externare | выписка | discharge
+трансфер | transfer | перевод | transfer
+фишэ | fișă | карточка | patient card
+контрол | control | контрольный осмотр | follow-up visit
+адеверинца | adeverință | справка | certificate
+урдженца, ургенца | urgență | приёмное отделение, неотложка | emergency department
+ЦНАМ, CNAM | CNAM | национальная медстраховая компания | national health insurance
+полица | poliță | страховой полис | insurance policy
+асигураре | asigurare | страховка | insurance
+ИМСП, IMSP | IMSP | государственное медучреждение | public medical institution
+ЦМФ, CMF | CMF | центр семейных врачей | family medicine center
+конкедиу | concediu | отпуск; больничный | vacation; sick leave
+бултин, бульетин | buletin | удостоверение личности | ID card
+пашапорт | pașaport | паспорт | passport
+досар | dosar | дело, папка документов | file, dossier
+ордин | ordin | приказ | order (official)
+примэрия | primărie | мэрия | city hall
+паркаре | parcare | парковка | parking
+
+### Everyday and discourse
+аша | așa | так | so, like this
+дечь | deci | значит, итак | so
+адикэ | adică | то есть | that is
+бре | bre | (междометие) | hey (interjection)
+мэй | măi | эй | hey
+вай | vai | ой | oh
+хай | hai | давай | come on
+хай сэ мерджем | hai să mergem | пойдём | let's go
+ши | și | и | and
+дар | dar | но | but
+нуштиу, ну штиу | nu știu | не знаю | I don't know
+бине | bine | хорошо | good
+фрумос | frumos | красиво, хорошо | nice
+фрате | frate | брат (обращение) | brother (address)
+пэкат | păcat | жаль | pity
+пофтим | poftim | пожалуйста; что? | here you are; pardon?
+мерси | mersi | спасибо | thanks
+пардон | pardon | извините | sorry
+бунэ зиуа | bună ziua | добрый день | good afternoon
+ла ревидере | la revedere | до свидания | goodbye
+ла мулць ань | la mulți ani | с днём рождения, с праздником | happy birthday
+кумэтру, кум | cumătru | кум | godfather of one's child
+нанаш, нанашка | naș, nașă | посажёный отец / мать | wedding godparents
+мош | moș | дед, старик | old man
+плэчинтэ | plăcintă | пирожок | pie
+мамалыга | mămăligă | мамалыга | polenta
+брынза | brânză | брынза | sheep cheese
+мэрцишор | mărțișor | мэрцишор | spring token (March 1)
+
+## 5. English words in medical speech / Английские слова в медицинской речи
+ok, okay | ок, окей | bine | OK
+follow-up | фоллоу-ап | monitorizare, supraveghere | follow-up
+screening | скрининг | screening | screening
+target | таргет | țintă | target
+guideline, ghid | гайдлайн | ghid clinic, protocol | guideline
+trigger | триггер | factor declanșator | trigger
+feedback | фидбэк | feedback, părere | feedback
+update | апдейт | actualizare | update
+review | ревью | revizuire | review
+approach | подход | abordare | approach
+case | кейс | caz | case
+meeting | митинг | ședință | meeting
+deadline | дедлайн | termen limită | deadline
+check-up | чекап | control, examen profilactic | check-up
+checklist | чек-лист | listă de verificare | checklist
+second opinion | второе мнение | a doua opinie | second opinion
+off-label | офф-лейбл | în afara indicațiilor | off-label
+score | скор | scor | score
+cut-off | кат-офф | valoare-prag | cut-off
+baseline | исходный уровень | nivel inițial | baseline
+red flag | красный флаг | semn de alarmă | red flag
+gold standard | золотой стандарт | standard de aur | gold standard
+evidence-based | доказательная медицина | bazat pe dovezi | evidence-based
+trial | трайал | studiu clinic | clinical trial
+fast-track | фаст-трек | procedură accelerată | fast track
+triaj | триаж | triaj | triage
+management | менеджмент | managementul pacientului, conduită | management
+compliance | комплаенс | complianță, aderență la tratament | compliance
+consent | согласие | consimțământ informat | informed consent
+outcome | аутком | rezultat, evoluție | outcome
+round, rounds | обход | vizită | ward round
+shift | смена | tură | shift
+on-call | дежурство | gardă | on call
+handover | передача смены | predarea turei | handover
+discharge | выписка | externare | discharge
+ICU | реанимация | ATI | intensive care unit
+ER | приёмное, неотложка | urgență | emergency room
+lab, labs | лаба, анализы | laborator, analize | laboratory, lab results
+bolus | болюс | bolus | bolus
+loading dose | нагрузочная доза | doză de încărcare | loading dose
+bridging | бриджинг | terapie de tranziție | bridging therapy
+weaning | отлучение от ИВЛ | sevraj de ventilator | weaning
+pacing | стимуляция | stimulare cardiacă | pacing
+drain | дренаж | dren | drain
+shunt | шунт | șunt | shunt
+by-pass | байпас, шунт | bypass | bypass
+stroke unit | инсультный блок | unitate de AVC | stroke unit
+point-of-care | прикроватный тест | test la patul bolnavului | point-of-care
+timing | тайминг | momentul optim | timing
+workup | обследование | investigații | workup
+backup | бэкап | rezervă | backup
+
+## 6. False friends and shifted meanings / Ложные друзья и сдвиги значения
+# These words LOOK like other words. Do not "correct" them into the wrong one.
+podrugă | подруга | prietenă; iubită (girlfriend), not only "female friend"
+prieten, prietenă | — | friend AND boyfriend/girlfriend
+ambulanță | скорая помощь | ambulance, emergency service. NOT "амбулатория" (outpatient clinic)
+ambulator, ambulatoriu | амбулатория | outpatient care. NOT "ambulanță"
+salon | больничная палата | hospital ward. NOT "салон" (beauty salon, car interior)
+palată | палата | hospital ward. The ASR may write "palat" (palace): in a hospital context it is "palată"
+secție | отделение | hospital department. NOT "секция" (sports club)
+corp, corpul 2 | корпус | hospital building. NOT "body"
+internare | госпитализация | hospital admission. NOT "интернатура" (internship)
+rezident | ординатор, резидент | resident doctor
+gardă | дежурство | on-call shift. NOT "гвардия" (guard)
+tensiune | артериальное давление | blood pressure. NOT "напряжение" (voltage)
+presiune | давление | used in Moldova for blood pressure too
+diagnoză | диагноз | diagnosis (Moldovan usage; standard Romanian is "diagnostic")
+are temperatură | температурит | has a fever
+are zahăr | у него сахар | has diabetes or high blood sugar
+analize | анализы | lab tests
+a lua sânge | взять кровь | to take a blood sample
+a face analizele | сдать анализы | to do lab tests
+a se trata | лечиться | to receive treatment
+a se interna | лечь в больницу | to be admitted
+a externa | выписать | to discharge from hospital
+i-am scris | выписал ему | I prescribed him
+bolnav | больной | the patient (colloquial for "pacient")
+stare | состояние | the patient's condition
+grupă | группа | disability group OR blood group, depending on context
+tabletă | таблетка | pill (also means a tablet device)
+sistemă | капельница | IV drip. NOT "system"
+направление | trimitere | referral. NOT "direction"
+больничный | concediu medical | sick leave certificate. NOT "hospital"
+приём | consultație | appointment. NOT "reception" or "trick"
+рецепт | rețetă | prescription (also a cooking recipe)
+контроль | control | follow-up check-up. NOT "control" in the sense of power
+общий анализ | analiza generală | complete blood count or urinalysis
+стационар | staționar | inpatient hospital
+диспансер | dispensar | specialized outpatient center (oncology, TB, etc.)

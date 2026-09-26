@@ -1,0 +1,850 @@
+# MEDICAL GLOSSARY — multidisciplinary consilium, Republic of Moldova
+# Format: Romanian | Russian | English / Latin
+# Purpose: ONLY to recognize misheard medical words (ASR errors).
+# Never translate between languages: a Romanian word stays Romanian, a Russian word stays Russian.
+
+## Cardiologie / Кардиология
+infarct miocardic acut (IMA) | острый инфаркт миокарда (ОИМ) | acute myocardial infarction
+cardiopatie ischemică (CPI) | ишемическая болезнь сердца (ИБС) | coronary artery disease
+angină pectorală | стенокардия | angina pectoris
+angină pectorală instabilă | нестабильная стенокардия | unstable angina
+sindrom coronarian acut (SCA) | острый коронарный синдром (ОКС) | acute coronary syndrome
+hipertensiune arterială (HTA) | артериальная гипертензия (АГ), гипертоническая болезнь | arterial hypertension
+criză hipertensivă | гипертонический криз | hypertensive crisis
+insuficiență cardiacă cronică (ICC) | хроническая сердечная недостаточность (ХСН) | chronic heart failure
+insuficiență cardiacă acută | острая сердечная недостаточность | acute heart failure
+edem pulmonar acut | отёк лёгких | acute pulmonary edema
+fibrilație atrială (FA) | фибрилляция предсердий (ФП), мерцательная аритмия | atrial fibrillation
+flutter atrial | трепетание предсердий | atrial flutter
+tahicardie ventriculară | желудочковая тахикардия | ventricular tachycardia
+fibrilație ventriculară | фибрилляция желудочков | ventricular fibrillation
+extrasistolie | экстрасистолия | extrasystole
+bradicardie | брадикардия | bradycardia
+bloc atrioventricular (BAV) | атриовентрикулярная блокада (АВ-блокада) | AV block
+bloc de ramură stângă / dreaptă | блокада левой / правой ножки пучка Гиса | left / right bundle branch block
+cardiomiopatie dilatativă | дилатационная кардиомиопатия | dilated cardiomyopathy
+cardiomiopatie hipertrofică | гипертрофическая кардиомиопатия | hypertrophic cardiomyopathy
+miocardită | миокардит | myocarditis
+pericardită | перикардит | pericarditis
+tamponadă cardiacă | тампонада сердца | cardiac tamponade
+endocardită infecțioasă | инфекционный эндокардит | infective endocarditis
+stenoză aortică | аортальный стеноз | aortic stenosis
+insuficiență mitrală | митральная недостаточность | mitral regurgitation
+stenoză mitrală | митральный стеноз | mitral stenosis
+valvulopatie | порок клапана | valvular heart disease
+proteză valvulară | протез клапана | prosthetic valve
+fracție de ejecție (FE) | фракция выброса (ФВ) | ejection fraction
+hipertrofie ventriculară stângă | гипертрофия левого желудочка (ГЛЖ) | left ventricular hypertrophy
+supradenivelare de segment ST | элевация сегмента ST, подъём ST | ST elevation
+subdenivelare de segment ST | депрессия сегмента ST | ST depression
+undă Q patologică | патологический зубец Q | pathological Q wave
+coronarografie | коронарография (КАГ) | coronary angiography
+angioplastie coronariană | коронарная ангиопластика, ЧКВ | percutaneous coronary intervention (PCI)
+stentare | стентирование | stenting
+stent | стент | stent
+bypass aortocoronarian | аортокоронарное шунтирование (АКШ) | coronary artery bypass graft (CABG)
+ecocardiografie (EcoCG) | эхокардиография (ЭхоКГ) | echocardiography
+monitorizare Holter | холтеровское мониторирование, холтер | Holter monitoring
+test de efort | нагрузочный тест, велоэргометрия | exercise stress test
+stimulator cardiac, pacemaker | электрокардиостимулятор (ЭКС) | pacemaker
+defibrilator implantabil | имплантируемый кардиовертер-дефибриллятор | ICD
+cardioversie | кардиоверсия | cardioversion
+ablație | абляция | ablation
+tromboembolism pulmonar (TEP) | тромбоэмболия лёгочной артерии (ТЭЛА) | pulmonary embolism
+tromboză venoasă profundă (TVP) | тромбоз глубоких вен (ТГВ) | deep vein thrombosis
+anevrism de aortă | аневризма аорты | aortic aneurysm
+disecție de aortă | расслоение аорты | aortic dissection
+ateroscleroză | атеросклероз | atherosclerosis
+arteriopatie obliterantă | облитерирующий атеросклероз | peripheral artery disease
+varice | варикозное расширение вен | varicose veins
+hipertensiune pulmonară | лёгочная гипертензия | pulmonary hypertension
+
+## Neurologie / Неврология
+accident vascular cerebral (AVC) ischemic | ишемический инсульт, ОНМК | ischemic stroke
+accident vascular cerebral hemoragic | геморрагический инсульт | hemorrhagic stroke
+atac ischemic tranzitoriu (AIT) | транзиторная ишемическая атака (ТИА) | transient ischemic attack
+hemoragie subarahnoidiană | субарахноидальное кровоизлияние (САК) | subarachnoid hemorrhage
+hemoragie intracerebrală | внутримозговое кровоизлияние | intracerebral hemorrhage
+hemipareză | гемипарез | hemiparesis
+hemiplegie | гемиплегия | hemiplegia
+tetrapareză | тетрапарез | tetraparesis
+afazie | афазия | aphasia
+disartrie | дизартрия | dysarthria
+disfagie | дисфагия | dysphagia
+ataxie | атаксия | ataxia
+vertij | головокружение, вертиго | vertigo
+cefalee | головная боль, цефалгия | headache
+migrenă | мигрень | migraine
+epilepsie | эпилепсия | epilepsy
+status epilepticus | эпилептический статус | status epilepticus
+criză convulsivă | судорожный приступ | seizure
+sindrom convulsiv | судорожный синдром | convulsive syndrome
+scleroză multiplă | рассеянный склероз | multiple sclerosis
+boala Parkinson | болезнь Паркинсона | Parkinson's disease
+boala Alzheimer | болезнь Альцгеймера | Alzheimer's disease
+encefalopatie discirculatorie | дисциркуляторная энцефалопатия | vascular encephalopathy
+meningită | менингит | meningitis
+encefalită | энцефалит | encephalitis
+polineuropatie | полинейропатия | polyneuropathy
+miastenie gravis | миастения | myasthenia gravis
+sindrom Guillain-Barré | синдром Гийена-Барре | Guillain-Barré syndrome
+hernie de disc | грыжа межпозвонкового диска | disc herniation
+osteocondroză | остеохондроз | osteochondrosis
+radiculopatie | радикулопатия | radiculopathy
+tromboliză | тромболизис | thrombolysis
+trombectomie mecanică | механическая тромбэктомия | mechanical thrombectomy
+scala Glasgow (GCS) | шкала комы Глазго | Glasgow Coma Scale
+scorul NIHSS | шкала NIHSS | NIH Stroke Scale
+scala Rankin | шкала Рэнкина | modified Rankin Scale
+edem cerebral | отёк головного мозга | cerebral edema
+hipertensiune intracraniană | внутричерепная гипертензия | intracranial hypertension
+comă | кома | coma
+puncție lombară | люмбальная пункция | lumbar puncture
+electroencefalografie (EEG) | электроэнцефалография (ЭЭГ) | electroencephalography
+electroneuromiografie (ENMG) | электронейромиография (ЭНМГ) | electromyography
+
+## Neurochirurgie / Нейрохирургия
+craniotomie | краниотомия | craniotomy
+trepanație | трепанация | trepanation
+hematom subdural | субдуральная гематома | subdural hematoma
+hematom epidural | эпидуральная гематома | epidural hematoma
+hidrocefalie | гидроцефалия | hydrocephalus
+șunt ventriculoperitoneal | вентрикулоперитонеальное шунтирование | ventriculoperitoneal shunt
+tumoră cerebrală | опухоль головного мозга | brain tumor
+glioblastom | глиобластома | glioblastoma
+meningiom | менингиома | meningioma
+anevrism cerebral | аневризма сосудов головного мозга | cerebral aneurysm
+laminectomie | ламинэктомия | laminectomy
+discectomie | дискэктомия | discectomy
+
+## Chirurgie generală / Общая хирургия
+abdomen acut | острый живот | acute abdomen
+apendicită acută | острый аппендицит | acute appendicitis
+apendicectomie | аппендэктомия | appendectomy
+colecistită acută | острый холецистит | acute cholecystitis
+litiază biliară, colelitiază | желчнокаменная болезнь (ЖКБ) | cholelithiasis
+colecistectomie laparoscopică | лапароскопическая холецистэктомия | laparoscopic cholecystectomy
+coledocolitiază | холедохолитиаз | choledocholithiasis
+colangită | холангит | cholangitis
+pancreatită acută | острый панкреатит | acute pancreatitis
+pancreonecroză | панкреонекроз | pancreatic necrosis
+ocluzie intestinală | кишечная непроходимость | bowel obstruction
+peritonită | перитонит | peritonitis
+ulcer perforat | перфоративная язва | perforated ulcer
+hemoragie digestivă superioară | желудочно-кишечное кровотечение (ЖКК) | upper GI bleeding
+hernie inghinală | паховая грыжа | inguinal hernia
+hernie ombilicală | пупочная грыжа | umbilical hernia
+hernie strangulată | ущемлённая грыжа | strangulated hernia
+eventrație | послеоперационная вентральная грыжа | incisional hernia
+laparotomie | лапаротомия | laparotomy
+laparoscopie | лапароскопия | laparoscopy
+rezecție gastrică | резекция желудка | gastrectomy
+hemicolectomie | гемиколэктомия | hemicolectomy
+stomă, colostomă | стома, колостома | stoma, colostomy
+anastomoză | анастомоз | anastomosis
+dehiscență de anastomoză | несостоятельность анастомоза | anastomotic leak
+drenaj | дренирование, дренаж | drainage
+abces | абсцесс | abscess
+flegmon | флегмона | phlegmon
+plagă postoperatorie | послеоперационная рана | surgical wound
+supurația plăgii | нагноение раны | wound infection
+sutură | шов | suture
+dehiscența plăgii | расхождение швов | wound dehiscence
+pansament | перевязка | dressing
+amputație | ампутация | amputation
+gangrenă | гангрена | gangrene
+picior diabetic | синдром диабетической стопы | diabetic foot
+hemoroizi | геморрой | hemorrhoids
+fisură anală | анальная трещина | anal fissure
+fistulă | свищ, фистула | fistula
+
+## Chirurgie vasculară și toracică / Сосудистая и торакальная хирургия
+endarterectomie carotidiană | каротидная эндартерэктомия | carotid endarterectomy
+stenoză carotidiană | стеноз сонной артерии | carotid stenosis
+ischemie critică a membrului | критическая ишемия конечности | critical limb ischemia
+bypass femuro-popliteu | бедренно-подколенное шунтирование | femoropopliteal bypass
+embolectomie | эмболэктомия | embolectomy
+toracotomie | торакотомия | thoracotomy
+toracoscopie | торакоскопия | thoracoscopy
+drenaj pleural | дренирование плевральной полости | chest tube drainage
+lobectomie | лобэктомия | lobectomy
+pneumonectomie | пневмонэктомия | pneumonectomy
+empiem pleural | эмпиема плевры | pleural empyema
+
+## Oncologie / Онкология
+tumoră malignă | злокачественная опухоль | malignant tumor
+tumoră benignă | доброкачественная опухоль | benign tumor
+neoplasm, formațiune de volum | новообразование, объёмное образование | neoplasm, mass
+carcinom | карцинома, рак | carcinoma
+adenocarcinom | аденокарцинома | adenocarcinoma
+carcinom scuamos | плоскоклеточный рак | squamous cell carcinoma
+sarcom | саркома | sarcoma
+limfom | лимфома | lymphoma
+metastaze | метастазы | metastases
+stadializare TNM | стадирование по TNM | TNM staging
+biopsie | биопсия | biopsy
+examen histopatologic | гистологическое исследование | histopathology
+examen citologic | цитологическое исследование | cytology
+imunohistochimie | иммуногистохимия (ИГХ) | immunohistochemistry
+chimioterapie | химиотерапия | chemotherapy
+radioterapie | лучевая терапия | radiotherapy
+imunoterapie | иммунотерапия | immunotherapy
+terapie țintită | таргетная терапия | targeted therapy
+hormonoterapie | гормонотерапия | hormone therapy
+tratament neoadjuvant | неоадъювантная терапия | neoadjuvant therapy
+tratament adjuvant | адъювантная терапия | adjuvant therapy
+markeri tumorali | онкомаркеры | tumor markers
+recidivă | рецидив | recurrence
+remisiune | ремиссия | remission
+progresie | прогрессирование | progression
+cancer mamar | рак молочной железы | breast cancer
+cancer pulmonar | рак лёгкого | lung cancer
+cancer colorectal | колоректальный рак | colorectal cancer
+cancer gastric | рак желудка | gastric cancer
+cancer pancreatic | рак поджелудочной железы | pancreatic cancer
+cancer hepatocelular | гепатоцеллюлярный рак | hepatocellular carcinoma
+cancer de prostată | рак предстательной железы | prostate cancer
+cancer de col uterin | рак шейки матки | cervical cancer
+cancer ovarian | рак яичников | ovarian cancer
+cancer renal | рак почки | renal cell carcinoma
+cancer de vezică urinară | рак мочевого пузыря | bladder cancer
+mastectomie | мастэктомия | mastectomy
+sectorectomie | секторальная резекция | lumpectomy
+tratament paliativ | паллиативное лечение | palliative care
+consiliu oncologic | онкоконсилиум | tumor board
+status ECOG | статус ECOG | ECOG performance status
+
+## Gastroenterologie și hepatologie / Гастроэнтерология и гепатология
+gastrită | гастрит | gastritis
+boala de reflux gastroesofagian (BRGE) | гастроэзофагеальная рефлюксная болезнь (ГЭРБ) | GERD
+esofagită | эзофагит | esophagitis
+ulcer gastric | язва желудка | gastric ulcer
+ulcer duodenal | язва двенадцатиперстной кишки | duodenal ulcer
+Helicobacter pylori | хеликобактер пилори | Helicobacter pylori
+ciroză hepatică | цирроз печени | liver cirrhosis
+hepatită cronică | хронический гепатит | chronic hepatitis
+hepatită virală B / C / D | вирусный гепатит B / C / D | viral hepatitis B / C / D
+steatoză hepatică | стеатоз печени, жировой гепатоз | hepatic steatosis
+ascită | асцит | ascites
+paracenteză | парацентез, лапароцентез | paracentesis
+varice esofagiene | варикозное расширение вен пищевода | esophageal varices
+hipertensiune portală | портальная гипертензия | portal hypertension
+encefalopatie hepatică | печёночная энцефалопатия | hepatic encephalopathy
+insuficiență hepatică | печёночная недостаточность | liver failure
+icter | желтуха | jaundice
+boala Crohn | болезнь Крона | Crohn's disease
+colită ulcerativă | язвенный колит | ulcerative colitis
+sindromul intestinului iritabil | синдром раздражённого кишечника (СРК) | irritable bowel syndrome
+pancreatită cronică | хронический панкреатит | chronic pancreatitis
+diverticuloză | дивертикулёз | diverticulosis
+polip colonic | полип толстой кишки | colon polyp
+fibrogastroduodenoscopie (FGDS) | фиброгастродуоденоскопия (ФГДС) | upper endoscopy
+colonoscopie | колоноскопия | colonoscopy
+colangiopancreatografie retrogradă endoscopică (CPGRE) | ЭРХПГ | ERCP
+elastografie hepatică | эластография печени, фиброскан | liver elastography
+
+## Pneumologie / Пульмонология
+pneumonie comunitară | внебольничная пневмония | community-acquired pneumonia
+pneumonie nosocomială | госпитальная пневмония | hospital-acquired pneumonia
+pneumonie de aspirație | аспирационная пневмония | aspiration pneumonia
+bronhopneumopatie obstructivă cronică (BPOC, BPCO) | хроническая обструктивная болезнь лёгких (ХОБЛ) | COPD
+exacerbare | обострение | exacerbation
+astm bronșic | бронхиальная астма | bronchial asthma
+bronșită acută | острый бронхит | acute bronchitis
+bronșiectazii | бронхоэктазы | bronchiectasis
+pleurezie | плеврит | pleurisy
+revărsat pleural | плевральный выпот, гидроторакс | pleural effusion
+pneumotorax | пневмоторакс | pneumothorax
+tuberculoză pulmonară | туберкулёз лёгких | pulmonary tuberculosis
+insuficiență respiratorie | дыхательная недостаточность (ДН) | respiratory failure
+fibroză pulmonară | лёгочный фиброз | pulmonary fibrosis
+sarcoidoză | саркоидоз | sarcoidosis
+spirometrie | спирометрия | spirometry
+VEMS | ОФВ1 | FEV1
+bronhoscopie | бронхоскопия | bronchoscopy
+puncție pleurală | плевральная пункция | thoracentesis
+saturație (SpO2) | сатурация | oxygen saturation
+oxigenoterapie | кислородотерапия, оксигенотерапия | oxygen therapy
+dispnee | одышка | dyspnea
+tuse productivă | продуктивный кашель | productive cough
+hemoptizie | кровохарканье | hemoptysis
+wheezing | свистящие хрипы | wheezing
+raluri crepitante | крепитация, влажные хрипы | crackles
+raluri sibilante | сухие хрипы | wheezes
+murmur vezicular diminuat | ослабленное везикулярное дыхание | decreased breath sounds
+
+## Nefrologie și urologie / Нефрология и урология
+boală cronică de rinichi (BCR) | хроническая болезнь почек (ХБП) | chronic kidney disease
+leziune renală acută, insuficiență renală acută (IRA) | острое почечное повреждение (ОПП), ОПН | acute kidney injury
+insuficiență renală cronică (IRC) | хроническая почечная недостаточность (ХПН) | chronic renal failure
+glomerulonefrită | гломерулонефрит | glomerulonephritis
+pielonefrită | пиелонефрит | pyelonephritis
+sindrom nefrotic | нефротический синдром | nephrotic syndrome
+nefropatie diabetică | диабетическая нефропатия | diabetic nephropathy
+litiază renală, urolitiază | мочекаменная болезнь (МКБ) | urolithiasis
+colică renală | почечная колика | renal colic
+hidronefroză | гидронефроз | hydronephrosis
+hemodializă | гемодиализ | hemodialysis
+dializă peritoneală | перитонеальный диализ | peritoneal dialysis
+fistulă arteriovenoasă | артериовенозная фистула | arteriovenous fistula
+rata filtrării glomerulare (RFG) | скорость клубочковой фильтрации (СКФ) | glomerular filtration rate
+proteinurie | протеинурия | proteinuria
+albuminurie | альбуминурия | albuminuria
+hematurie | гематурия | hematuria
+leucociturie | лейкоцитурия | leukocyturia
+oligurie | олигурия | oliguria
+anurie | анурия | anuria
+hiperplazie benignă de prostată, adenom de prostată | доброкачественная гиперплазия предстательной железы (ДГПЖ), аденома простаты | benign prostatic hyperplasia
+PSA | ПСА | prostate-specific antigen
+cistită | цистит | cystitis
+prostatită | простатит | prostatitis
+sondă urinară, cateter Foley | мочевой катетер, катетер Фолея | Foley catheter
+retenție acută de urină | острая задержка мочи | acute urinary retention
+cistoscopie | цистоскопия | cystoscopy
+nefrectomie | нефрэктомия | nephrectomy
+litotriție | литотрипсия | lithotripsy
+nefrostomie | нефростомия | nephrostomy
+transplant renal | трансплантация почки | kidney transplant
+
+## Endocrinologie / Эндокринология
+diabet zaharat tip 1 / tip 2 (DZ) | сахарный диабет 1 / 2 типа (СД) | diabetes mellitus type 1 / type 2
+cetoacidoză diabetică | диабетический кетоацидоз | diabetic ketoacidosis
+comă hiperosmolară | гиперосмолярная кома | hyperosmolar coma
+hipoglicemie | гипогликемия | hypoglycemia
+hiperglicemie | гипергликемия | hyperglycemia
+hemoglobină glicată (HbA1c) | гликированный гемоглобин (HbA1c) | glycated hemoglobin
+insulinoterapie | инсулинотерапия | insulin therapy
+polineuropatie diabetică | диабетическая полинейропатия | diabetic polyneuropathy
+hipotiroidie | гипотиреоз | hypothyroidism
+hipertiroidie, tireotoxicoză | гипертиреоз, тиреотоксикоз | hyperthyroidism, thyrotoxicosis
+tiroidită autoimună | аутоиммунный тиреоидит (АИТ) | autoimmune thyroiditis
+gușă nodulară | узловой зоб | nodular goiter
+nodul tiroidian | узел щитовидной железы | thyroid nodule
+tiroidectomie | тиреоидэктомия | thyroidectomy
+TSH, T4 liber, T3 liber | ТТГ, свободный Т4, свободный Т3 | TSH, free T4, free T3
+insuficiență suprarenală | надпочечниковая недостаточность | adrenal insufficiency
+sindrom Cushing | синдром Кушинга | Cushing's syndrome
+feocromocitom | феохромоцитома | pheochromocytoma
+hiperparatiroidie | гиперпаратиреоз | hyperparathyroidism
+adenom hipofizar | аденома гипофиза | pituitary adenoma
+obezitate | ожирение | obesity
+indice de masă corporală (IMC) | индекс массы тела (ИМТ) | body mass index
+osteoporoză | остеопороз | osteoporosis
+dislipidemie | дислипидемия | dyslipidemia
+hipercolesterolemie | гиперхолестеринемия | hypercholesterolemia
+sindrom metabolic | метаболический синдром | metabolic syndrome
+
+## Obstetrică și ginecologie / Акушерство и гинекология
+sarcină | беременность | pregnancy
+vârstă gestațională, termen de sarcină | срок беременности, гестационный срок | gestational age
+preeclampsie | преэклампсия | preeclampsia
+eclampsie | эклампсия | eclampsia
+sindrom HELLP | HELLP-синдром | HELLP syndrome
+diabet gestațional | гестационный сахарный диабет | gestational diabetes
+placentă praevia | предлежание плаценты | placenta previa
+dezlipire prematură de placentă normal inserată | преждевременная отслойка нормально расположенной плаценты (ПОНРП) | placental abruption
+iminență de naștere prematură | угроза преждевременных родов | threatened preterm labor
+naștere prematură | преждевременные роды | preterm birth
+ruperea prematură a membranelor | преждевременное излитие околоплодных вод | premature rupture of membranes
+operație cezariană | кесарево сечение | cesarean section
+hemoragie postpartum | послеродовое кровотечение | postpartum hemorrhage
+avort spontan | самопроизвольный выкидыш | miscarriage
+sarcină extrauterină, sarcină ectopică | внематочная беременность | ectopic pregnancy
+hipoxie fetală | гипоксия плода | fetal hypoxia
+retard de creștere intrauterină | задержка роста плода (ЗРП) | intrauterine growth restriction
+fibrom uterin, miom uterin | миома матки | uterine fibroid
+endometrioză | эндометриоз | endometriosis
+chist ovarian | киста яичника | ovarian cyst
+anexită | аднексит | adnexitis
+histerectomie | гистерэктомия, экстирпация матки | hysterectomy
+chiuretaj uterin | выскабливание полости матки | uterine curettage
+col uterin | шейка матки | cervix
+test Babeș-Papanicolau | ПАП-тест, мазок на онкоцитологию | Pap smear
+colposcopie | кольпоскопия | colposcopy
+cardiotocografie (CTG) | кардиотокография (КТГ) | cardiotocography
+
+## Pediatrie și neonatologie / Педиатрия и неонатология
+nou-născut | новорождённый | newborn
+prematur | недоношенный | premature infant
+icter neonatal | желтуха новорождённых | neonatal jaundice
+sindrom de detresă respiratorie | респираторный дистресс-синдром | respiratory distress syndrome
+bronșiolită | бронхиолит | bronchiolitis
+laringotraheită acută, crup | острый ларинготрахеит, ложный круп | croup
+rahitism | рахит | rickets
+anemie feriprivă | железодефицитная анемия | iron deficiency anemia
+deshidratare | обезвоживание, эксикоз | dehydration
+convulsii febrile | фебрильные судороги | febrile seizures
+vaccinare | вакцинация, прививка | vaccination
+scor Apgar | шкала Апгар | Apgar score
+greutate la naștere | вес при рождении | birth weight
+malformație congenitală | врождённый порок развития | congenital malformation
+malformație cardiacă congenitală | врождённый порок сердца (ВПС) | congenital heart defect
+defect septal atrial / ventricular | дефект межпредсердной / межжелудочковой перегородки (ДМПП / ДМЖП) | atrial / ventricular septal defect
+paralizie cerebrală infantilă | детский церебральный паралич (ДЦП) | cerebral palsy
+enterocolită ulceronecrotică | язвенно-некротический энтероколит | necrotizing enterocolitis
+
+## Boli infecțioase / Инфекционные болезни
+sepsis | сепсис | sepsis
+șoc septic | септический шок | septic shock
+infecție a tractului urinar | инфекция мочевыводящих путей (ИМП) | urinary tract infection
+COVID-19 | ковид, COVID-19 | COVID-19
+gripă | грипп | influenza
+infecție respiratorie acută (IRVA) | ОРВИ | acute respiratory viral infection
+infecție HIV | ВИЧ-инфекция | HIV infection
+erizipel | рожа, рожистое воспаление | erysipelas
+celulită | целлюлит, флегмона мягких тканей | cellulitis
+infecție cu Clostridioides difficile | клостридиальная инфекция | C. difficile infection
+infecție nosocomială | внутрибольничная инфекция | nosocomial infection
+toxiinfecție alimentară | пищевая токсикоинфекция | food poisoning
+salmoneloză | сальмонеллёз | salmonellosis
+antibioticoterapie | антибиотикотерапия | antibiotic therapy
+antibiogramă | антибиотикограмма, чувствительность к антибиотикам | antibiotic susceptibility test
+hemocultură | посев крови, гемокультура | blood culture
+urocultură | посев мочи | urine culture
+frotiu | мазок | smear, swab
+procalcitonină | прокальцитонин | procalcitonin
+rezistență la antibiotice | антибиотикорезистентность | antimicrobial resistance
+
+## Hematologie / Гематология
+anemie | анемия | anemia
+anemie B12-deficitară | B12-дефицитная анемия | B12 deficiency anemia
+trombocitopenie | тромбоцитопения | thrombocytopenia
+trombocitoză | тромбоцитоз | thrombocytosis
+leucocitoză | лейкоцитоз | leukocytosis
+leucopenie | лейкопения | leukopenia
+neutropenie | нейтропения | neutropenia
+pancitopenie | панцитопения | pancytopenia
+leucemie acută | острый лейкоз | acute leukemia
+leucemie limfocitară cronică | хронический лимфолейкоз | chronic lymphocytic leukemia
+leucemie mieloidă cronică | хронический миелолейкоз | chronic myeloid leukemia
+mielom multiplu | множественная миелома | multiple myeloma
+limfom Hodgkin | лимфома Ходжкина, лимфогранулематоз | Hodgkin lymphoma
+coagulare intravasculară diseminată (CID) | ДВС-синдром | disseminated intravascular coagulation
+hemofilie | гемофилия | hemophilia
+transfuzie de sânge, hemotransfuzie | переливание крови, гемотрансфузия | blood transfusion
+masă eritrocitară | эритроцитарная масса | packed red blood cells
+plasmă proaspăt congelată | свежезамороженная плазма (СЗП) | fresh frozen plasma
+concentrat trombocitar | тромбоконцентрат | platelet concentrate
+puncție medulară | стернальная пункция, пункция костного мозга | bone marrow aspiration
+trepanobiopsie | трепанобиопсия | bone marrow biopsy
+grupa sanguină, factorul Rh | группа крови, резус-фактор | blood group, Rh factor
+
+## Reumatologie / Ревматология
+artrită reumatoidă | ревматоидный артрит | rheumatoid arthritis
+lupus eritematos sistemic | системная красная волчанка (СКВ) | systemic lupus erythematosus
+spondilită anchilozantă | анкилозирующий спондилит, болезнь Бехтерева | ankylosing spondylitis
+artrită psoriazică | псориатический артрит | psoriatic arthritis
+gută | подагра | gout
+osteoartroză, artroză | остеоартроз, артроз | osteoarthritis
+gonartroză | гонартроз | knee osteoarthritis
+coxartroză | коксартроз | hip osteoarthritis
+vasculită | васкулит | vasculitis
+sclerodermie sistemică | системная склеродермия | systemic sclerosis
+polimialgie reumatică | ревматическая полимиалгия | polymyalgia rheumatica
+febră reumatismală | ревматическая лихорадка | rheumatic fever
+factor reumatoid | ревматоидный фактор (РФ) | rheumatoid factor
+anticorpi anti-CCP | антитела к ЦЦП (АЦЦП) | anti-CCP antibodies
+anticorpi antinucleari (ANA) | антинуклеарные антитела (АНА) | antinuclear antibodies
+
+## Traumatologie și ortopedie / Травматология и ортопедия
+fractură | перелом | fracture
+fractură de col femural | перелом шейки бедра | femoral neck fracture
+fractură deschisă / închisă | открытый / закрытый перелом | open / closed fracture
+fractură cu deplasare | перелом со смещением | displaced fracture
+fractură vertebrală | перелом позвонка | vertebral fracture
+luxație | вывих | dislocation
+entorsă | растяжение связок | sprain
+contuzie | ушиб | contusion
+politraumatism | политравма, сочетанная травма | polytrauma
+traumatism cranio-cerebral (TCC) | черепно-мозговая травма (ЧМТ) | traumatic brain injury
+comoție cerebrală | сотрясение головного мозга (СГМ) | concussion
+contuzie cerebrală | ушиб головного мозга | cerebral contusion
+osteosinteză | остеосинтез | osteosynthesis
+osteosinteză cu tijă centromedulară | интрамедуллярный остеосинтез | intramedullary nailing
+endoprotezare, artroplastie | эндопротезирование | joint replacement, arthroplasty
+imobilizare gipsată | гипсовая иммобилизация, гипс | cast immobilization
+tracțiune scheletică | скелетное вытяжение | skeletal traction
+aparat de fixare externă | аппарат внешней фиксации, аппарат Илизарова | external fixator
+osteomielită | остеомиелит | osteomyelitis
+ruptură de menisc | разрыв мениска | meniscus tear
+ruptură de ligament încrucișat anterior | разрыв передней крестообразной связки | anterior cruciate ligament tear
+artroscopie | артроскопия | arthroscopy
+sindrom de compartiment | компартмент-синдром | compartment syndrome
+
+## Arsuri și chirurgie plastică / Комбустиология и пластическая хирургия
+arsură termică | термический ожог | thermal burn
+arsură de gradul II / III | ожог II / III степени | second / third degree burn
+suprafața arsă | площадь ожога | burned body surface area
+boala arșilor | ожоговая болезнь | burn disease
+necrectomie | некрэктомия | necrectomy
+autodermoplastie | аутодермопластика | skin grafting
+degerătură | отморожение | frostbite
+
+## Anesteziologie și terapie intensivă (ATI) / Анестезиология и реанимация (ОРИТ)
+anestezie generală | общая анестезия, наркоз | general anesthesia
+anestezie spinală | спинальная анестезия | spinal anesthesia
+anestezie epidurală | эпидуральная анестезия | epidural anesthesia
+intubație orotraheală | интубация трахеи | endotracheal intubation
+ventilație mecanică, ventilație artificială pulmonară | искусственная вентиляция лёгких (ИВЛ) | mechanical ventilation
+ventilație non-invazivă | неинвазивная вентиляция (НИВЛ) | non-invasive ventilation
+extubare | экстубация | extubation
+traheostomie | трахеостомия | tracheostomy
+cateter venos central | центральный венозный катетер (ЦВК), подключичный катетер | central venous catheter
+cateter arterial | артериальный катетер | arterial line
+resuscitare cardiopulmonară | сердечно-лёгочная реанимация (СЛР) | cardiopulmonary resuscitation
+stop cardiac | остановка сердца | cardiac arrest
+asistolie | асистолия | asystole
+defibrilare | дефибрилляция | defibrillation
+șoc hemoragic | геморрагический шок | hemorrhagic shock
+șoc cardiogen | кардиогенный шок | cardiogenic shock
+șoc anafilactic | анафилактический шок | anaphylactic shock
+șoc hipovolemic | гиповолемический шок | hypovolemic shock
+sindrom de disfuncție multiplă de organe | полиорганная недостаточность (ПОН) | multiple organ dysfunction syndrome
+sindrom de detresă respiratorie acută (ARDS) | острый респираторный дистресс-синдром (ОРДС) | ARDS
+suport vasopresor | вазопрессорная поддержка | vasopressor support
+suport inotrop | инотропная поддержка | inotropic support
+sedare | седация | sedation
+analgosedare | аналгоседация | analgosedation
+echilibru acido-bazic | кислотно-щелочное состояние (КЩС) | acid-base balance
+acidoză metabolică | метаболический ацидоз | metabolic acidosis
+gazometrie, gaze sanguine | газы крови, анализ газов крови | blood gas analysis
+lactat | лактат | lactate
+diureză | диурез | urine output
+bilanț hidric | водный баланс | fluid balance
+nutriție parenterală | парентеральное питание | parenteral nutrition
+nutriție enterală | энтеральное питание, зондовое питание | enteral nutrition
+sondă nazogastrică | назогастральный зонд | nasogastric tube
+scor SOFA | шкала SOFA | SOFA score
+scor APACHE | шкала APACHE | APACHE score
+deces, exitus letalis | летальный исход, exitus letalis | death
+
+## Imagistică / Лучевая диагностика
+radiografie | рентгенография, рентген | X-ray
+radiografie toracică | рентген органов грудной клетки | chest X-ray
+tomografie computerizată (CT) | компьютерная томография (КТ) | computed tomography
+CT cu contrast | КТ с контрастом, КТ с контрастированием | contrast-enhanced CT
+angio-CT | КТ-ангиография | CT angiography
+rezonanță magnetică nucleară (RMN) | магнитно-резонансная томография (МРТ) | MRI
+ecografie, ultrasonografie (USG) | ультразвуковое исследование (УЗИ) | ultrasound
+ecografie Doppler | допплерография, УЗДГ, дуплексное сканирование | Doppler ultrasound
+angiografie | ангиография | angiography
+scintigrafie | сцинтиграфия | scintigraphy
+PET-CT | ПЭТ-КТ | PET-CT
+mamografie | маммография | mammography
+densitometrie | денситометрия | bone densitometry
+fluorografie | флюорография | fluorography
+opacitate | затемнение | opacity
+infiltrat | инфильтрат | infiltrate
+formațiune de volum, leziune de focar | объёмное образование, очаговое образование | mass, focal lesion
+lichid liber în cavitatea abdominală | свободная жидкость в брюшной полости | free fluid in the abdomen
+contrast | контраст, контрастное вещество | contrast agent
+
+## Laborator / Лабораторная диагностика
+hemoleucogramă, analiza generală a sângelui | общий анализ крови (ОАК) | complete blood count
+sumarul urinei, analiza generală a urinei | общий анализ мочи (ОАМ) | urinalysis
+analiza biochimică a sângelui | биохимический анализ крови | blood chemistry
+hemoglobină | гемоглобин | hemoglobin
+hematocrit | гематокрит | hematocrit
+eritrocite | эритроциты | red blood cells
+leucocite | лейкоциты | white blood cells
+formula leucocitară | лейкоцитарная формула | white blood cell differential
+neutrofile nesegmentate | палочкоядерные нейтрофилы | band neutrophils
+limfocite | лимфоциты | lymphocytes
+trombocite | тромбоциты | platelets
+VSH | СОЭ | erythrocyte sedimentation rate
+proteina C reactivă (PCR) | С-реактивный белок (СРБ) | C-reactive protein
+glicemie | глюкоза крови, гликемия, сахар крови | blood glucose
+creatinină | креатинин | creatinine
+uree | мочевина | urea
+acid uric | мочевая кислота | uric acid
+bilirubină totală / directă | общий / прямой билирубин | total / direct bilirubin
+ALT, AST | АЛТ, АСТ | ALT, AST
+fosfatază alcalină | щелочная фосфатаза (ЩФ) | alkaline phosphatase
+GGT | ГГТ | gamma-GT
+amilază | амилаза | amylase
+lipază | липаза | lipase
+colesterol total | общий холестерин | total cholesterol
+LDL-colesterol, HDL-colesterol | ЛПНП, ЛПВП | LDL, HDL
+trigliceride | триглицериды | triglycerides
+troponină | тропонин | troponin
+CK-MB | КФК-МВ | CK-MB
+NT-proBNP | NT-proBNP | NT-proBNP
+D-dimeri | Д-димер | D-dimer
+INR | МНО | INR
+timp de protrombină, indice de protrombină | протромбиновое время, протромбиновый индекс (ПТИ) | prothrombin time
+APTT | АЧТВ | aPTT
+fibrinogen | фибриноген | fibrinogen
+coagulogramă | коагулограмма | coagulation panel
+ionogramă | электролиты | electrolytes
+potasiu (K) | калий | potassium
+sodiu (Na) | натрий | sodium
+clor (Cl) | хлор | chloride
+calciu | кальций | calcium
+magneziu | магний | magnesium
+fier seric | сывороточное железо | serum iron
+feritină | ферритин | ferritin
+albumină | альбумин | albumin
+proteine totale | общий белок | total protein
+lactatdehidrogenază (LDH) | лактатдегидрогеназа (ЛДГ) | lactate dehydrogenase
+markeri virali (HBsAg, anti-HCV) | маркеры гепатитов (HBsAg, анти-HCV) | hepatitis markers
+
+## ORL / Оториноларингология
+otită medie acută | острый средний отит | acute otitis media
+sinuzită | синусит, гайморит | sinusitis
+amigdalită | тонзиллит, ангина | tonsillitis
+abces periamigdalian | паратонзиллярный абсцесс | peritonsillar abscess
+laringită | ларингит | laryngitis
+rinită | ринит | rhinitis
+hipoacuzie | тугоухость | hearing loss
+epistaxis | носовое кровотечение | epistaxis
+polipi nazali | полипы носа | nasal polyps
+deviație de sept nazal | искривление носовой перегородки | deviated nasal septum
+amigdalectomie | тонзиллэктомия | tonsillectomy
+edem laringian | отёк гортани | laryngeal edema
+
+## Oftalmologie / Офтальмология
+cataractă | катаракта | cataract
+glaucom | глаукома | glaucoma
+retinopatie diabetică | диабетическая ретинопатия | diabetic retinopathy
+dezlipire de retină | отслойка сетчатки | retinal detachment
+degenerescență maculară | макулярная дегенерация | macular degeneration
+conjunctivită | конъюнктивит | conjunctivitis
+presiune intraoculară | внутриглазное давление (ВГД) | intraocular pressure
+acuitate vizuală | острота зрения | visual acuity
+fund de ochi | глазное дно | fundus
+facoemulsificare | факоэмульсификация | phacoemulsification
+
+## Dermatologie și venerologie / Дерматовенерология
+dermatită atopică | атопический дерматит | atopic dermatitis
+psoriazis | псориаз | psoriasis
+eczemă | экзема | eczema
+urticarie | крапивница | urticaria
+edem Quincke | отёк Квинке | angioedema
+melanom | меланома | melanoma
+carcinom bazocelular | базалиома, базальноклеточный рак | basal cell carcinoma
+herpes zoster | опоясывающий лишай, опоясывающий герпес | herpes zoster
+escară | пролежень | pressure ulcer
+micoză | микоз | fungal infection
+scabie | чесотка | scabies
+sifilis | сифилис | syphilis
+
+## Psihiatrie și narcologie / Психиатрия и наркология
+depresie | депрессия | depression
+tulburare anxioasă | тревожное расстройство | anxiety disorder
+schizofrenie | шизофрения | schizophrenia
+tulburare bipolară | биполярное расстройство | bipolar disorder
+delirium | делирий | delirium
+delirium tremens | алкогольный делирий, белая горячка | delirium tremens
+demență | деменция | dementia
+sindrom de sevraj alcoolic | алкогольный абстинентный синдром | alcohol withdrawal syndrome
+dependență de alcool | алкогольная зависимость | alcohol dependence
+tentativă suicidară | суицидальная попытка | suicide attempt
+intoxicație | отравление, интоксикация | poisoning, intoxication
+
+## Stomatologie și chirurgie maxilo-facială / Стоматология и челюстно-лицевая хирургия
+carie | кариес | dental caries
+pulpită | пульпит | pulpitis
+parodontită | пародонтит | periodontitis
+flegmon al planșeului bucal | флегмона дна полости рта | floor of mouth phlegmon
+fractură de mandibulă | перелом нижней челюсти | mandibular fracture
+
+## Reabilitare / Реабилитация
+kinetoterapie | лечебная физкультура (ЛФК), кинезиотерапия | physiotherapy
+fizioterapie | физиотерапия | physical therapy
+masaj | массаж | massage
+reabilitare medicală | медицинская реабилитация | medical rehabilitation
+grad de dizabilitate | группа инвалидности | disability grade
+
+## Medicamente frecvente / Частые препараты
+acid acetilsalicilic, aspirină | ацетилсалициловая кислота, аспирин | aspirin
+clopidogrel | клопидогрел | clopidogrel
+ticagrelor | тикагрелор | ticagrelor
+heparină | гепарин | heparin
+enoxaparină | эноксапарин | enoxaparin
+fondaparinux | фондапаринукс | fondaparinux
+warfarină | варфарин | warfarin
+rivaroxaban | ривароксабан | rivaroxaban
+apixaban | апиксабан | apixaban
+dabigatran | дабигатран | dabigatran
+alteplază | алтеплаза | alteplase
+streptokinază | стрептокиназа | streptokinase
+acid tranexamic | транексамовая кислота | tranexamic acid
+atorvastatină | аторвастатин | atorvastatin
+rosuvastatină | розувастатин | rosuvastatin
+enalapril | эналаприл | enalapril
+lisinopril | лизиноприл | lisinopril
+perindopril | периндоприл | perindopril
+ramipril | рамиприл | ramipril
+captopril | каптоприл | captopril
+losartan | лозартан | losartan
+valsartan | валсартан | valsartan
+sacubitril/valsartan | сакубитрил/валсартан | sacubitril/valsartan
+amlodipină | амлодипин | amlodipine
+nifedipină | нифедипин | nifedipine
+bisoprolol | бисопролол | bisoprolol
+metoprolol | метопролол | metoprolol
+carvedilol | карведилол | carvedilol
+nebivolol | небиволол | nebivolol
+furosemid | фуросемид | furosemide
+torasemid | торасемид | torasemide
+spironolactonă | спиронолактон, верошпирон | spironolactone
+hidroclorotiazidă | гидрохлортиазид | hydrochlorothiazide
+indapamidă | индапамид | indapamide
+nitroglicerină | нитроглицерин | nitroglycerin
+isosorbid dinitrat | изосорбида динитрат | isosorbide dinitrate
+amiodaronă | амиодарон, кордарон | amiodarone
+digoxină | дигоксин | digoxin
+ivabradină | ивабрадин | ivabradine
+metformină | метформин | metformin
+gliclazidă | гликлазид | gliclazide
+glimepiridă | глимепирид | glimepiride
+insulină | инсулин | insulin
+empagliflozină | эмпаглифлозин | empagliflozin
+dapagliflozină | дапаглифлозин | dapagliflozin
+semaglutidă | семаглутид | semaglutide
+levotiroxină | левотироксин, L-тироксин | levothyroxine
+tiamazol | тиамазол | thiamazole
+omeprazol | омепразол | omeprazole
+pantoprazol | пантопразол | pantoprazole
+esomeprazol | эзомепразол | esomeprazole
+famotidină | фамотидин | famotidine
+metoclopramidă | метоклопрамид, церукал | metoclopramide
+ondansetron | ондансетрон | ondansetron
+drotaverină | дротаверин, но-шпа | drotaverine
+lactuloză | лактулоза | lactulose
+acid ursodeoxicolic | урсодезоксихолевая кислота | ursodeoxycholic acid
+paracetamol | парацетамол | paracetamol
+ibuprofen | ибупрофен | ibuprofen
+diclofenac | диклофенак | diclofenac
+ketorolac | кеторолак | ketorolac
+metamizol | метамизол, анальгин | metamizole
+tramadol | трамадол | tramadol
+morfină | морфин | morphine
+fentanil | фентанил | fentanyl
+propofol | пропофол | propofol
+ketamină | кетамин | ketamine
+midazolam | мидазолам | midazolam
+diazepam | диазепам, сибазон | diazepam
+lidocaină | лидокаин | lidocaine
+bupivacaină | бупивакаин | bupivacaine
+rocuroniu | рокуроний | rocuronium
+dexametazonă | дексаметазон | dexamethasone
+prednisolon | преднизолон | prednisolone
+metilprednisolon | метилпреднизолон | methylprednisolone
+hidrocortizon | гидрокортизон | hydrocortisone
+amoxicilină | амоксициллин | amoxicillin
+amoxicilină/acid clavulanic | амоксициллин/клавуланат, амоксиклав | amoxicillin/clavulanate
+ampicilină | ампициллин | ampicillin
+ceftriaxonă | цефтриаксон | ceftriaxone
+cefuroximă | цефуроксим | cefuroxime
+cefazolină | цефазолин | cefazolin
+cefepimă | цефепим | cefepime
+azitromicină | азитромицин | azithromycin
+claritromicină | кларитромицин | clarithromycin
+ciprofloxacină | ципрофлоксацин | ciprofloxacin
+levofloxacină | левофлоксацин | levofloxacin
+metronidazol | метронидазол | metronidazole
+vancomicină | ванкомицин | vancomycin
+linezolid | линезолид | linezolid
+meropenem | меропенем | meropenem
+imipenem | имипенем | imipenem
+piperacilină/tazobactam | пиперациллин/тазобактам | piperacillin/tazobactam
+gentamicină | гентамицин | gentamicin
+amikacină | амикацин | amikacin
+colistină | колистин | colistin
+fluconazol | флуконазол | fluconazole
+aciclovir | ацикловир | acyclovir
+salbutamol | сальбутамол | salbutamol
+budesonidă | будесонид | budesonide
+ipratropiu | ипратропий | ipratropium
+aminofilină | эуфиллин, аминофиллин | aminophylline
+adrenalină, epinefrină | адреналин, эпинефрин | epinephrine
+noradrenalină, norepinefrină | норадреналин, норэпинефрин | norepinephrine
+dopamină | допамин | dopamine
+dobutamină | добутамин | dobutamine
+atropină | атропин | atropine
+ser fiziologic, soluție NaCl 0,9% | физраствор, натрия хлорид 0,9% | normal saline
+soluție de glucoză 5% | глюкоза 5% | dextrose 5%
+soluție Ringer | раствор Рингера | Ringer's solution
+albumină umană | альбумин человеческий | human albumin
+clorură de potasiu | калия хлорид | potassium chloride
+sulfat de magneziu | магния сульфат, магнезия | magnesium sulfate
+fier intravenos | железо внутривенно | intravenous iron
+levetiracetam | леветирацетам | levetiracetam
+acid valproic, valproat | вальпроевая кислота, вальпроат | valproate
+carbamazepină | карбамазепин | carbamazepine
+haloperidol | галоперидол | haloperidol
+manitol | маннитол | mannitol
+naloxonă | налоксон | naloxone
+oxitocină | окситоцин | oxytocin
+metotrexat | метотрексат | methotrexate
+
+## Abrevieri / Аббревиатуры (Romanian | Russian | English meaning)
+TA | АД | blood pressure
+FCC, FC | ЧСС | heart rate
+FR | ЧДД | respiratory rate
+SpO2 | SpO2, сатурация | oxygen saturation
+t° | t°, температура | body temperature
+ECG | ЭКГ | electrocardiogram
+EcoCG | ЭхоКГ | echocardiogram
+CT | КТ | CT scan
+RMN | МРТ | MRI
+USG | УЗИ | ultrasound
+FGDS | ФГДС | upper endoscopy
+HTA | АГ, ГБ | hypertension
+CPI | ИБС | coronary artery disease
+IMA | ОИМ | acute myocardial infarction
+SCA | ОКС | acute coronary syndrome
+ICC | ХСН | chronic heart failure
+FA | ФП | atrial fibrillation
+AVC | ОНМК | stroke
+AIT | ТИА | transient ischemic attack
+TCC | ЧМТ | traumatic brain injury
+BPOC, BPCO | ХОБЛ | COPD
+BCR | ХБП | chronic kidney disease
+IRA | ОПП, ОПН | acute kidney injury
+DZ | СД | diabetes mellitus
+TEP | ТЭЛА | pulmonary embolism
+TVP | ТГВ | deep vein thrombosis
+CID | ДВС | DIC
+ATI | ОРИТ, реанимация | intensive care unit
+CVC | ЦВК | central venous catheter
+i.v., i.m., s.c. | в/в, в/м, п/к | intravenous, intramuscular, subcutaneous
+per os | per os, перорально | by mouth
+PCR | СРБ | C-reactive protein
+VSH | СОЭ | ESR
+RFG | СКФ | GFR
+IMC | ИМТ | BMI
+HLG | ОАК | complete blood count
+MF | семейный врач | family doctor
+CMF | ЦСВ | family medicine center
+IMSP | ПМСУ | public medical institution
+CNAM | НМСК, ЦНАМ | National Health Insurance Company
+
+## Unități de măsură / Единицы измерения
+mg | мг | milligram
+g | г | gram
+mcg, µg | мкг | microgram
+ml | мл | milliliter
+l | л | liter
+UI | ЕД, МЕ | international units
+mmol/l | ммоль/л | mmol/L
+µmol/l | мкмоль/л | µmol/L
+g/l | г/л | g/L
+mmHg | мм рт. ст. | mmHg
+bătăi pe minut | ударов в минуту | beats per minute
+picături pe minut | капель в минуту | drops per minute
+de două ori pe zi | два раза в день | twice daily
+
+## Termeni latini / Латинские термины
+status praesens | status praesens | current status
+status localis | status localis, локальный статус | local findings
+anamnesis morbi | anamnesis morbi, анамнез заболевания | history of present illness
+anamnesis vitae | anamnesis vitae, анамнез жизни | past history
+per os | per os | by mouth
+cito | cito, срочно | urgent
+lege artis | lege artis | by the rules of the art
+de novo | de novo | newly arising
+in situ | in situ | in place
+ad hoc | ad hoc | for this purpose
+exitus letalis | exitus letalis, летальный исход | death

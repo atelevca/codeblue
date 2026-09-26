@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local models and generated transcripts
+models/
+models/*.gguf
+transcripts/
+
+# Log files written by Serilog
+logs/
+
+# Local configuration
+appsettings.Development.json

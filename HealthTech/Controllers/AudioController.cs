@@ -28,5 +28,11 @@ namespace HealthTech.Controllers
         public Task<SpeakerTranscriptResult> TranscribeWithSpeakers(
             [FromServices] IProcessedAudioSpeakerTranscriptService speakerTranscriptService, CancellationToken cancellationToken) =>
             speakerTranscriptService.TranscribeWithSpeakersAsync(cancellationToken);
+
+        [HttpPost("correctTranscript")]
+        public Task<TranscriptCorrectionResult> CorrectTranscript(
+            [FromQuery] string fileName,
+            [FromServices] ITranscriptCorrectionService transcriptCorrectionService, CancellationToken cancellationToken) =>
+            transcriptCorrectionService.CorrectTranscriptAsync(fileName, cancellationToken);
     }
 }
