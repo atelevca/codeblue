@@ -23,6 +23,12 @@ namespace HealthTech.Transcription
         // spreading across 30 s windows, at the cost of a bit of cross-window consistency.
         public bool NoContext { get; set; } = true;
 
+        /// <summary>
+        /// Слово с вероятностью ниже этого значения помечается как неуверенно распознанное.
+        /// 0.5 отобрано на глаз: ниже - список раздувается обычными словами, выше - пропускает термины.
+        /// </summary>
+        public double LowConfidenceThreshold { get; set; } = 0.5;
+
         // Run on the GPU when a GPU runtime (Vulkan) is loaded; false forces CPU inference.
         public bool UseGpu { get; set; } = true;
 
