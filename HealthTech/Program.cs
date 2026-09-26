@@ -2,6 +2,9 @@ using HealthTech.Audio;
 using HealthTech.Data;
 using HealthTech.Jobs;
 using HealthTech.Transcription;
+using HealthTech.Workflow;
+using HealthTech.Workflow.Steps;
+using WorkflowCore.Interface;
 using Microsoft.Extensions.Options;
 using SemanticKernel;
 using Serilog;
@@ -80,6 +83,18 @@ builder.Services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(
 builder.Services.AddSingleton<DatabaseInitializer>();
 builder.Services.AddSingleton<IJobRepository, JobRepository>();
 
+// Оркестрация. База движка отдельная от прикладной: его фоновый опрос и запросы
+// статуса из UI не должны встречаться на блокировке одного файла SQLite.
+var workflowDatabasePath = Path.GetFullPath(
+    builder.Configuration["Database:WorkflowDatabasePath"] ?? "../data/workflow.db",
+    builder.Environment.ContentRootPath);
+Directory.CreateDirectory(Path.GetDirectoryName(workflowDatabasePath)!);
+builder.Services.AddWorkflow(options => options.UseSqlite(
+    $"Data Source={workflowDatabasePath};", canCreateDB: true));
+
+builder.Services.AddSingleton<IJobProgress, JobProgress>();
+builder.Services.AddTransient<StubStep>();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
 builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
@@ -87,6 +102,11 @@ builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
 var app = builder.Build();
 
 app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
+
+var workflowHost = app.Services.GetRequiredService<IWorkflowHost>();
+workflowHost.RegisterWorkflow<TranscriptionWorkflow, TranscriptionJobData>();
+workflowHost.Start();
+app.Lifetime.ApplicationStopping.Register(() => workflowHost.Stop());
 
 // После перезапуска инстансы WorkflowCore поднимутся сами, но строки Jobs остались бы
 // в Running навсегда. Честнее пометить их упавшими, чем показывать вечную обработку.
