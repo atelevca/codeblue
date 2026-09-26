@@ -6,8 +6,15 @@ public sealed record MinutesVerification
     public required string Summary { get; init; }
     public required IReadOnlyList<MinutesDiscrepancy> Findings { get; init; }
 
+    /// <summary>
+    /// False when the verification stage did not produce a usable answer. Такой документ
+    /// сохраняется как есть, но выдавать его за сверенный нельзя: пустой список находок
+    /// у несостоявшейся сверки означает "не проверяли", а не "расхождений нет".
+    /// </summary>
+    public bool Completed { get; init; } = true;
+
     /// <summary>No discrepancies were reported by the model; not a guarantee of factual correctness.</summary>
-    public bool IsConsistent => Findings.Count == 0;
+    public bool IsConsistent => Completed && Findings.Count == 0;
 }
 
 public sealed record MinutesDiscrepancy
