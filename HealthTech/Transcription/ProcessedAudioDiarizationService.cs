@@ -5,10 +5,11 @@ namespace HealthTech.Transcription
     public interface IProcessedAudioDiarizationService
     {
         /// <summary>
-        /// Takes the first audio file (by name) from the processed directory, runs speaker diarization only
-        /// (no speech recognition) and saves the speaker turns as <c>&lt;name&gt;.diarization.json</c>.
+        /// Runs speaker diarization only (no speech recognition) over <paramref name="wavPath"/> (16 kHz mono)
+        /// and saves the speaker turns as <c>&lt;name&gt;.diarization.json</c> in <paramref name="outputDirectory"/>.
         /// </summary>
-        Task<DiarizationResult> DiarizeFirstProcessedAsync(CancellationToken cancellationToken = default);
+        Task<DiarizationResult> DiarizeAsync(
+            string wavPath, string outputDirectory, CancellationToken cancellationToken = default);
     }
 
     public class ProcessedAudioDiarizationService : IProcessedAudioDiarizationService
@@ -30,12 +31,12 @@ namespace HealthTech.Transcription
             _logger = logger;
         }
 
-        public async Task<DiarizationResult> DiarizeFirstProcessedAsync(CancellationToken cancellationToken = default)
+        public async Task<DiarizationResult> DiarizeAsync(
+            string wavPath, string outputDirectory, CancellationToken cancellationToken = default)
         {
-            var path = _files.FindFirst();
-            var fileName = Path.GetFileName(path);
+            var fileName = Path.GetFileName(wavPath);
 
-            var samples = await _sampleReader.ReadMono16kAsync(path, cancellationToken);
+            var samples = await _sampleReader.ReadMono16kAsync(wavPath, cancellationToken);
             var durationSeconds = Math.Round((double)samples.Length / AudioSampleReader.TargetSampleRate, 2);
             _logger.LogInformation("Diarizing {FileName}, duration {DurationSeconds:F1} s", fileName, durationSeconds);
 
@@ -54,7 +55,7 @@ namespace HealthTech.Transcription
                 .ToList();
             var result = new DiarizationResult(fileName, durationSeconds, speakers, segments, diarizationMs);
 
-            await _files.SaveJsonAsync(result, path, ".diarization.json", cancellationToken);
+            await _files.SaveJsonAsync(result, outputDirectory, wavPath, ".diarization.json", cancellationToken);
             return result;
         }
     }
