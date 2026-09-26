@@ -1,22 +1,24 @@
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { ExportFormat, Lang, Mom, RecordDetails } from '../../api/models';
+import { FindingKind, Job, TranscriptResult } from '../../api/models';
 import { ResonaApi, toApiError } from '../../api/resona-api';
-import {
-  EXPORT_EXT,
-  EXPORT_FORMATS,
-  LANGS,
-  SPEAKER_COLORS,
-  langName,
-  typeInfo,
-} from '../../shared/catalog';
+import { speakerColor, typeInfo } from '../../shared/catalog';
 import { fmtDate, fmtDur, fmtLongDate } from '../../shared/format';
+import { deltaLines, deltaText } from '../../shared/quill';
+import { MinutesStore } from '../../state/minutes-store';
+import { jobTitle } from '../../state/processing-tracker';
 import { SpeakerMap, resolveLink } from '../../state/speaker-map';
 import { Toasts } from '../../state/toasts';
 import { EmailDialog } from './email-dialog';
 import { SpeakerPanel } from './speaker-panel';
 
 type DownloadState = 'idle' | 'preparing' | 'done';
+
+const KIND_LABELS: Record<FindingKind, string> = {
+  Unsupported: 'Afirmație fără suport în transcriere',
+  Omission: 'Omisiune',
+  Contradiction: 'Contradicție',
+};
 
 @Component({
   selector: 'app-mom-view',
@@ -28,124 +30,149 @@ export class MomView implements OnInit {
   private readonly api = inject(ResonaApi);
   private readonly toasts = inject(Toasts);
   private readonly speakerMap = inject(SpeakerMap);
+  private readonly minutes = inject(MinutesStore);
 
-  readonly record = input.required<RecordDetails>();
-  readonly renamed = output<string>();
+  readonly record = input.required<Job>();
 
-  protected readonly mom = signal<Mom | null>(null);
-  protected readonly momError = signal<string | null>(null);
-  protected readonly translatingTo = signal<Lang | null>(null);
-  protected readonly format = signal<ExportFormat>('DOCX');
+  protected readonly result = signal<TranscriptResult | null>(null);
+  protected readonly resultError = signal<string | null>(null);
   protected readonly download = signal<DownloadState>('idle');
   protected readonly copied = signal(false);
   protected readonly emailOpen = signal(false);
   protected readonly mappingExpanded = signal(false);
+  protected readonly transcriptOpen = signal(false);
+  private readonly now = signal(Date.now());
 
-  protected readonly langs = LANGS;
-  protected readonly formats = EXPORT_FORMATS;
-  protected readonly colors = SPEAKER_COLORS;
-  protected readonly langName = langName;
+  protected readonly title = computed(() => jobTitle(this.record()));
+  protected readonly typeLabel = computed(() => typeInfo(this.record().profileKey).label);
+  protected readonly state = computed(() => this.minutes.of(this.record().id));
+  protected readonly doc = computed(() => {
+    const s = this.state();
+    return s.kind === 'ready' ? s.doc : null;
+  });
+  protected readonly errorState = computed(() => {
+    const s = this.state();
+    return s.kind === 'error' ? s : null;
+  });
+  protected readonly lines = computed(() => deltaLines(this.doc()?.delta));
 
-  protected readonly lang = computed<Lang>(() => this.mom()?.lang ?? this.record().momLang);
-  protected readonly typeLabel = computed(() => typeInfo(this.record().discussionType).label);
+  protected readonly elapsed = computed(() => {
+    const s = this.state();
+    return s.kind === 'generating' ? fmtDur((this.now() - s.startedAt) / 1000) : '';
+  });
+
+  private readonly speakerCount = computed(
+    () => this.result()?.speakers.length ?? this.record().speakersCount ?? 0,
+  );
 
   protected readonly names = computed(() => {
     const links = this.speakerMap.of(this.record().id);
     return Array.from(
-      { length: this.record().speakersCount },
+      { length: this.speakerCount() },
       (_, i) => resolveLink(links[i])?.name ?? `Vorbitor ${i + 1}`,
     );
   });
 
+  protected readonly colors = computed(() =>
+    Array.from({ length: this.speakerCount() }, (_, i) => speakerColor(i)),
+  );
+
+  protected readonly turns = computed(() => {
+    const r = this.result();
+    if (!r) return [];
+    const names = this.names();
+    return r.turns.map((t) => {
+      const i = r.speakers.indexOf(t.speaker);
+      return {
+        time: t.startTime,
+        name: names[i] ?? t.speaker,
+        color: i >= 0 ? speakerColor(i) : 'var(--text-4)',
+        text: t.text,
+      };
+    });
+  });
+
   protected readonly meta = computed(() => {
     const r = this.record();
-    const people = r.speakersCount === 1 ? '1 participant' : `${r.speakersCount} participanți`;
-    return `${fmtLongDate(r.createdAt)} · ${fmtDur(r.durationSec)} · ${people} · ${langName(this.lang())}`;
+    const n = this.speakerCount();
+    const people = n === 1 ? '1 participant' : `${n} participanți`;
+    return `${fmtLongDate(r.createdAt)} · ${fmtDur(r.durationSec ?? 0)} · ${people}`;
   });
 
   protected readonly readyDate = computed(() =>
     fmtDate(this.record().completedAt ?? this.record().createdAt),
   );
 
-  protected readonly actions = computed(() => {
-    const names = this.names();
-    return (this.mom()?.actionItems ?? []).map((a) => ({
-      ...a,
-      owner: names[a.ownerSpeakerIndex] ?? `Vorbitor ${a.ownerSpeakerIndex + 1}`,
-    }));
+  protected readonly verification = computed(() => {
+    const v = this.doc()?.verification;
+    if (!v) return null;
+    const tone = !v.completed ? 'unknown' : v.isConsistent ? 'ok' : 'warn';
+    const label = !v.completed
+      ? 'Verificarea automată nu a fost finalizată — documentul nu este verificat'
+      : v.isConsistent
+        ? 'Verificat: nicio neconcordanță cu transcrierea'
+        : v.findings.length === 1
+          ? '1 neconcordanță cu transcrierea'
+          : `${v.findings.length} neconcordanțe cu transcrierea`;
+    return {
+      tone,
+      label,
+      summary: v.summary,
+      findings: v.findings.map((f) => ({ ...f, kindLabel: KIND_LABELS[f.kind] ?? f.kind })),
+    };
   });
 
-  protected readonly topics = computed(() =>
-    (this.mom()?.topics ?? []).map((t) => ({ ...t, ts: fmtDur(t.startSec) })),
-  );
+  protected readonly docName = computed(() => `proces-verbal-${this.record().id}.pdf`);
 
-  protected readonly docName = computed(
-    () => `${this.record().title} — proces-verbal.${EXPORT_EXT[this.format()]}`,
-  );
+  protected readonly plainText = computed(() => {
+    const d = this.doc();
+    return d ? deltaText(d.delta) || d.minutesMarkdown : '';
+  });
 
   protected readonly details = computed(() => {
     const r = this.record();
-    return [
+    const rows = [
       { k: 'Fișier sursă', v: r.fileName },
-      { k: 'Durată', v: fmtDur(r.durationSec) },
-      { k: 'Vorbitori', v: String(r.speakersCount) },
+      { k: 'Durată', v: fmtDur(r.durationSec ?? 0) },
+      { k: 'Vorbitori detectați', v: this.result() ? String(this.speakerCount()) : '—' },
       { k: 'Tipul discuției', v: this.typeLabel() },
-      { k: 'Limbă', v: langName(this.lang()) },
-      { k: 'Timp de procesare', v: fmtDur(r.processingTimeSec ?? 0) },
     ];
+    if (r.speakersCount)
+      rows.splice(3, 0, { k: 'Vorbitori declarați', v: String(r.speakersCount) });
+    if (r.completedAt)
+      rows.push({
+        k: 'Timp de procesare',
+        v: fmtDur((Date.parse(r.completedAt) - Date.parse(r.createdAt)) / 1000),
+      });
+    const d = this.doc();
+    if (d) rows.push({ k: 'Proces-verbal salvat', v: fmtDate(d.savedAt) });
+    return rows;
   });
 
+  constructor() {
+    const timer = setInterval(() => this.now.set(Date.now()), 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
+
   ngOnInit(): void {
-    this.api.getMomWhenReady(this.record().id).subscribe({
-      next: (m) => this.mom.set(m),
-      error: (e) => this.momError.set(toApiError(e).message),
+    const id = this.record().id;
+    this.minutes.load(id);
+    this.api.getResult(id).subscribe({
+      next: (r) => this.result.set(r),
+      error: (e) => this.resultError.set(toApiError(e).message),
     });
   }
 
-  protected pickLang(code: Lang): void {
-    if (code === this.lang() || this.translatingTo()) return;
-    this.translatingTo.set(code);
+  protected generate(): void {
     this.download.set('idle');
-    this.api.getMomWhenReady(this.record().id, code).subscribe({
-      next: (m) => {
-        this.mom.set(m);
-        this.translatingTo.set(null);
-        this.toasts.success('Proces-verbal actualizat', 'Limba: ' + langName(code));
-      },
-      error: (e) => {
-        this.translatingTo.set(null);
-        this.toasts.error('Traducerea a eșuat', toApiError(e).message);
-      },
-    });
+    this.minutes.generate(this.record().id, this.title());
   }
 
-  protected pickFormat(f: ExportFormat): void {
-    this.format.set(f);
-    this.download.set('idle');
-  }
-
-  protected rename(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    const title = input.value.trim();
-    const current = this.record().title;
-    if (!title || title === current) {
-      input.value = current;
-      return;
-    }
-    this.api.updateRecord(this.record().id, title).subscribe({
-      next: (r) => this.renamed.emit(r.title),
-      error: (err) => {
-        input.value = current;
-        this.toasts.error('Redenumirea a eșuat', toApiError(err).message);
-      },
-    });
-  }
-
-  protected exportFile(): void {
+  protected exportPdf(): void {
     if (this.download() === 'preparing') return;
     this.download.set('preparing');
     const fallback = this.docName();
-    this.api.exportMom(this.record().id, this.format(), this.lang()).subscribe({
+    this.api.downloadPdf(this.record().id).subscribe({
       next: ({ blob, fileName }) => {
         const name = fileName ?? fallback;
         const url = URL.createObjectURL(blob);
@@ -164,32 +191,14 @@ export class MomView implements OnInit {
     });
   }
 
-  /** "Copiază ca text" is built on the client from the Mom. */
+  /** "Copiază ca text" is built on the client from the saved document. */
   protected copyText(): void {
-    const m = this.mom();
-    if (!m) return;
-    const r = this.record();
-    const text = [
-      '# ' + r.title,
-      `Proces-verbal · ${fmtLongDate(r.createdAt)} · ${fmtDur(r.durationSec)}`,
-      '',
-      'Participanți: ' + this.names().join(', '),
-      '',
-      '## ' + m.sectionTitles.summary,
-      m.summary,
-      '',
-      '## ' + m.sectionTitles.decisions,
-      ...m.decisions.map((d, i) => `${i + 1}. ${d}`),
-      '',
-      '## ' + m.sectionTitles.actions,
-      ...this.actions().map((a) => `- ${a.task} — ${a.owner}, termen ${a.due}`),
-      '',
-      '## ' + m.sectionTitles.topics,
-      ...this.topics().map((t) => `- ${t.ts} ${t.title}: ${t.note}`),
-    ].join('\n');
-    navigator.clipboard?.writeText(text).catch(() => undefined);
+    const text = this.plainText();
+    if (!text) return;
+    const full = ['Participanți: ' + this.names().join(', '), '', text].join('\n');
+    navigator.clipboard?.writeText(full).catch(() => undefined);
     this.copied.set(true);
-    this.toasts.success('Copiat în clipboard', 'Proces-verbal: ' + r.title);
+    this.toasts.success('Copiat în clipboard', 'Proces-verbal: ' + this.title());
     setTimeout(() => this.copied.set(false), 2000);
   }
 

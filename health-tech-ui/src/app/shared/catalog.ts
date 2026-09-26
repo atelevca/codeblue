@@ -1,5 +1,4 @@
-// Frontend-only reference data (see "Frontend-only" in schema.md).
-import { DiscussionType, ExportFormat, Lang, ProcessingStage } from '../api/models';
+// Frontend-only reference data. The backend has no endpoints for these.
 
 /** Speaker colors, by 0-based speaker index. */
 export const SPEAKER_COLORS = [
@@ -13,81 +12,81 @@ export const SPEAKER_COLORS = [
   'oklch(0.82 0.12 115)',
 ];
 
+export function speakerColor(i: number): string {
+  return SPEAKER_COLORS[i % SPEAKER_COLORS.length];
+}
+
+/** Speaker count choices in the form (the backend accepts 1..20). */
 export const MAX_SPEAKERS = 8;
-export const MAX_FILE_BYTES = 500e6;
+/** `Uploads:MaxBytes` on the backend. */
+export const MAX_FILE_BYTES = 1024 ** 3;
 export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'flac', 'ogg', 'aac', 'aiff', 'opus'];
 export const SHOWN_FORMATS = ['MP3', 'WAV', 'M4A', 'FLAC', 'OGG', 'AAC'];
-export const EXPORT_FORMATS: ExportFormat[] = ['DOCX', 'PDF', 'MD'];
-export const EXPORT_EXT: Record<ExportFormat, string> = { DOCX: 'docx', PDF: 'pdf', MD: 'md' };
-
-export interface LangInfo {
-  code: Lang;
-  /** Label on the language buttons. */
-  label: string;
-  /** Name used in sentences ("Limba: Rusă"). */
-  name: string;
-}
-
-export const LANGS: LangInfo[] = [
-  { code: 'RO', label: 'Română', name: 'Română' },
-  { code: 'RU', label: 'Русский', name: 'Rusă' },
-  { code: 'EN', label: 'Engleză', name: 'Engleză' },
-];
-
-export function langName(code: Lang | undefined): string {
-  return LANGS.find((l) => l.code === code)?.name ?? 'Română';
-}
 
 export interface DiscussionTypeInfo {
   label: string;
   hint: string;
 }
 
-export const DISCUSSION_TYPES: Record<DiscussionType, DiscussionTypeInfo> = {
+/**
+ * RO labels for the profile keys of `GET /profiles`. The list itself comes from the server; a key
+ * missing here falls back to the server's `displayName`.
+ */
+const DISCUSSION_TYPES: Record<string, DiscussionTypeInfo> = {
   medical: {
     label: 'Medical',
     hint: 'Acuze, evaluare, decizii clinice, indicații și note pe pacient.',
   },
-  executive: {
-    label: 'Executive',
-    hint: 'Rezumat, decizii, sarcini și subiecte discutate.',
-  },
   administrative: {
-    label: 'Administrative',
+    label: 'Administrativ',
     hint: 'Rezumat, poziții convenite, sarcini și punctele de pe agendă.',
+  },
+  financial: {
+    label: 'Financiar',
+    hint: 'Rezumat, cifre și bugete discutate, decizii și sarcini.',
   },
 };
 
-export function typeInfo(t: DiscussionType | undefined): DiscussionTypeInfo {
-  return DISCUSSION_TYPES[t ?? 'executive'] ?? DISCUSSION_TYPES.executive;
+/** Used when `GET /profiles` cannot be loaded. */
+export const FALLBACK_PROFILE_KEYS = Object.keys(DISCUSSION_TYPES);
+
+export function typeInfo(key: string | undefined, displayName?: string): DiscussionTypeInfo {
+  return (key && DISCUSSION_TYPES[key]) || { label: displayName ?? key ?? 'Necunoscut', hint: '' };
 }
 
 export interface StageInfo {
-  id: ProcessingStage;
   name: string;
   desc: string;
+  /** Band of `Job.percent` covered by the stage (backend step weights). */
+  from: number;
+  to: number;
 }
 
+/** Backend steps grouped into four stages: normalize+prepare+VAD → ASR → diarize+align → LLM. */
 export const STAGES: StageInfo[] = [
   {
-    id: 'audio_analysis',
     name: 'Analiză audio',
-    desc: 'Normalizarea nivelurilor și detectarea vorbirii',
+    desc: 'Normalizarea sunetului și detectarea vorbirii',
+    from: 0,
+    to: 15,
   },
   {
-    id: 'speaker_identification',
-    name: 'Identificarea vorbitorilor',
-    desc: 'Separarea și etichetarea fiecărei voci',
-  },
-  {
-    id: 'transcription',
     name: 'Transcriere',
-    desc: 'Conversia vorbirii în text pentru fiecare vorbitor',
+    desc: 'Conversia vorbirii în text, fragment cu fragment',
+    from: 15,
+    to: 55,
   },
   {
-    id: 'mom_drafting',
-    name: 'Redactarea procesului-verbal',
-    desc: 'Redactarea rezumatului, deciziilor și sarcinilor',
+    name: 'Identificarea vorbitorilor',
+    desc: 'Separarea vocilor și atribuirea replicilor',
+    from: 55,
+    to: 78,
+  },
+  {
+    name: 'Corectarea terminologiei',
+    desc: 'Verificarea termenilor de specialitate cu modelul lingvistic',
+    from: 78,
+    to: 100,
   },
 ];
 
@@ -126,13 +125,3 @@ export function emailOf(p: Person): string {
     .join('.');
   return base + (p.med ? '@spitalul-clinic.ro' : '@companie.ro');
 }
-
-/** Sample quotes shown next to each detected voice (UI mock). */
-export const SNIPPETS = [
-  'Să începem cu cele mai recente rezultate și continuăm de acolo.',
-  'Sunt de acord, dar aș vrea să verific cifrele înainte să ne angajăm.',
-  'Din partea mea totul e gata, ne mai trebuie doar o dată.',
-  'Putem reveni la acest punct la finalul întâlnirii?',
-  'Am notat, mă ocup eu și revin cu un răspuns până vineri.',
-  'Mi se pare important să stabilim clar cine răspunde de ce.',
-];

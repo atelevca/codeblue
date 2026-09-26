@@ -1,15 +1,12 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { toApiError } from '../../api/resona-api';
-import { DiscussionType } from '../../api/models';
 import {
   AUDIO_EXTENSIONS,
-  DISCUSSION_TYPES,
-  LANGS,
   MAX_SPEAKERS,
   SHOWN_FORMATS,
   SPEAKER_COLORS,
-  langName,
+  typeInfo,
 } from '../../shared/catalog';
 import { fmtDur, fmtSize, stripExt } from '../../shared/format';
 import { Breadcrumb } from '../../state/breadcrumb';
@@ -32,13 +29,15 @@ export class NewRecordPage {
   protected readonly dragging = signal(false);
   protected readonly formats = SHOWN_FORMATS;
   protected readonly accept = AUDIO_EXTENSIONS.map((e) => '.' + e).join(',') + ',audio/*';
-  protected readonly langs = LANGS;
   protected readonly speakerOptions = Array.from({ length: MAX_SPEAKERS }, (_, i) => i + 1);
   protected readonly colors = SPEAKER_COLORS;
-  protected readonly types = (Object.keys(DISCUSSION_TYPES) as DiscussionType[]).map((id) => ({
-    id,
-    label: DISCUSSION_TYPES[id].label,
-  }));
+  protected readonly types = computed(() =>
+    this.store.profiles().map((p) => ({ id: p.key, label: typeInfo(p.key, p.displayName).label })),
+  );
+  private readonly typeLabel = computed(() => {
+    const key = this.store.type();
+    return typeInfo(key, this.store.profiles().find((p) => p.key === key)?.displayName).label;
+  });
 
   protected readonly ready = computed(() => this.store.phase() === 'ready');
   protected readonly uploading = computed(() => this.store.phase() === 'uploading');
@@ -71,26 +70,28 @@ export class NewRecordPage {
     const short = d
       .toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' })
       .replace('.', '');
-    const t = DISCUSSION_TYPES[this.store.type()].label;
+    const t = this.typeLabel();
     return [stripExt(f.name), `${t} — ${short}`, `${t} — ${d.toLocaleDateString('ro-RO')}`].filter(
       (x, i, a) => a.indexOf(x) === i,
     );
   });
 
   protected readonly typeHint = computed(() => {
-    const t = DISCUSSION_TYPES[this.store.type()];
-    return `${t.label} — procesul-verbal include: ${t.hint.charAt(0).toLowerCase()}${t.hint.slice(1)}`;
+    const hint = typeInfo(this.store.type()).hint;
+    return hint
+      ? `${this.typeLabel()} — procesul-verbal include: ${hint.charAt(0).toLowerCase()}${hint.slice(1)}`
+      : this.typeLabel();
   });
 
   protected readonly outputLabel = computed(
-    () =>
-      `${DISCUSSION_TYPES[this.store.type()].label} — proces-verbal · ${langName(this.store.lang())}`,
+    () => `${this.typeLabel()} — transcriere cu vorbitori și proces-verbal`,
   );
 
   protected readonly estLabel = computed(() => {
     if (!this.ready()) return 'Se așteaptă finalizarea încărcării';
+    // Transcription runs at roughly 2–3× the audio length on the demo machine.
     const dur = this.store.file()?.durationSec ?? 0;
-    return `Timp estimat de procesare: aproximativ ${Math.max(1, Math.round(dur / 900))} min`;
+    return `Timp estimat de procesare: aproximativ ${Math.max(1, Math.round((dur * 2.5) / 60))} min`;
   });
 
   protected readonly placeholder = computed(() => {
@@ -100,6 +101,7 @@ export class NewRecordPage {
 
   constructor() {
     inject(Breadcrumb).set('Înregistrare nouă');
+    this.store.loadProfiles();
   }
 
   protected browse(e?: Event): void {

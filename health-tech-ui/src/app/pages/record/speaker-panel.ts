@@ -1,6 +1,6 @@
 import { Component, DestroyRef, computed, inject, input, model, signal } from '@angular/core';
-import { RecordDetails } from '../../api/models';
-import { PEOPLE, SPEAKER_COLORS } from '../../shared/catalog';
+import { Job, TranscriptResult } from '../../api/models';
+import { PEOPLE, speakerColor } from '../../shared/catalog';
 import { fmtDur, initials } from '../../shared/format';
 import { speakerStats, speakerSuggestions } from '../../shared/speaker-stats';
 import { SpeakerLink, SpeakerMap, resolveLink } from '../../state/speaker-map';
@@ -15,7 +15,9 @@ export class SpeakerPanel {
   private readonly map = inject(SpeakerMap);
   private readonly toasts = inject(Toasts);
 
-  readonly record = input.required<RecordDetails>();
+  readonly record = input.required<Job>();
+  /** Speakers come from the transcript; `null` while it loads. */
+  readonly result = input<TranscriptResult | null>(null);
   readonly expanded = model(false);
 
   protected readonly pickFor = signal<number | null>(null);
@@ -24,41 +26,37 @@ export class SpeakerPanel {
   private playTimer?: ReturnType<typeof setTimeout>;
 
   private readonly links = computed(() => this.map.of(this.record().id));
-  private readonly count = computed(() => this.record().speakersCount);
+  protected readonly count = computed(() => this.result()?.speakers.length ?? 0);
+  private readonly medical = computed(() => this.record().profileKey === 'medical');
 
   private readonly suggestions = computed(() => {
     const links = this.links();
     const mapped = Array.from({ length: this.count() }, (_, i) => !!links[i]);
     const used = links.flatMap((l) => (l && 'personId' in l ? [l.personId] : []));
-    return speakerSuggestions(
-      this.record().id,
-      this.record().discussionType === 'medical',
-      mapped,
-      used,
-    );
+    return speakerSuggestions(this.record().id, this.medical(), mapped, used);
   });
 
   protected readonly mappedCount = computed(() => this.links().filter(Boolean).length);
   protected readonly suggestionCount = computed(() => this.suggestions().filter(Boolean).length);
 
   protected readonly speakers = computed(() => {
-    const r = this.record(),
+    const result = this.result(),
       links = this.links(),
       sugg = this.suggestions();
-    const stats = speakerStats(r.id, r.speakersCount, r.durationSec);
-    return stats.map((st, i) => {
+    if (!result) return [];
+    return speakerStats(result).map((st, i) => {
       const p = resolveLink(links[i]);
       return {
         i,
         label: `Vorbitor ${i + 1}`,
-        color: SPEAKER_COLORS[i],
+        color: speakerColor(i),
         time: fmtDur(st.talkSec),
         pct: st.pct + '%',
         ts: fmtDur(st.firstSec),
         quote: st.quote,
         person: p,
         av: p ? initials(p.name) : '?',
-        avBg: p ? (p.guest ? '#F3F2EF' : SPEAKER_COLORS[i]) : '#fff',
+        avBg: p ? (p.guest ? '#F3F2EF' : speakerColor(i)) : '#fff',
         suggestion: sugg[i],
       };
     });
@@ -68,7 +66,7 @@ export class SpeakerPanel {
     const i = this.pickFor();
     if (i === null) return [];
     const q = this.pickQ().trim().toLowerCase();
-    const med = this.record().discussionType === 'medical';
+    const med = this.medical();
     const links = this.links();
     const sugg = this.suggestions()[i];
     return PEOPLE.filter((p) => !q || `${p.name} ${p.role}`.toLowerCase().includes(q))
@@ -101,7 +99,7 @@ export class SpeakerPanel {
     this.pickQ.set('');
   }
 
-  /** Voice sample stub: toggles a "playing" state for a few seconds. */
+  /** Voice sample stub (frontend-only): toggles a "playing" state for a few seconds. */
   protected play(i: number): void {
     clearTimeout(this.playTimer);
     if (this.playing() === i) {

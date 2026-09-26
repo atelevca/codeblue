@@ -191,21 +191,6 @@
   font-size: 12px;
   color: var(--text-2);
 }
-.lang-opt {
-  height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.lang-opt .mono {
-  font-size: 10px;
-  color: var(--text-3);
-}
-.lang-opt.on .mono {
-  color: var(--accent-ink);
-}
 .result {
   border-top: 1px solid var(--line-soft);
   padding: 14px 22px;

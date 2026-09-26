@@ -1,10 +1,14 @@
-import { Component, DestroyRef, computed, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { ProcessingStatus, RecordDetails } from '../../api/models';
+import { Job } from '../../api/models';
 import { STAGES } from '../../shared/catalog';
 import { fmtDate, fmtDur, fmtSize, plural } from '../../shared/format';
+import { jobTitle } from '../../state/processing-tracker';
 
 const BARS = 64;
+
+/** Backend step captions of the two slow steps: `Распознавание: чанк 3 из 7`, `...: батч 2 из 5`. */
+const STEP_COUNTER = /(чанк|батч)\s+(\d+)\s+из\s+(\d+)/i;
 
 @Component({
   selector: 'app-processing-view',
@@ -13,35 +17,36 @@ const BARS = 64;
   styleUrl: './processing-view.scss',
 })
 export class ProcessingView {
-  readonly record = input.required<RecordDetails>();
-  readonly status = input<ProcessingStatus | undefined>();
-  readonly retry = output<void>();
+  readonly record = input.required<Job>();
 
   private readonly tick = signal(0);
 
-  protected readonly s = computed<ProcessingStatus>(
-    () =>
-      this.status() ?? {
-        recordId: this.record().id,
-        status: this.record().status,
-        progress: this.record().progress,
-        error: this.record().error,
-      },
-  );
-  protected readonly failed = computed(() => this.s().status === 'failed');
-  protected readonly pending = computed(() => this.s().status === 'pending');
-  protected readonly progress = computed(() => Math.floor(this.s().progress));
+  protected readonly title = computed(() => jobTitle(this.record()));
+  protected readonly failed = computed(() => this.record().status === 'Failed');
+  protected readonly pending = computed(() => this.record().status === 'Pending');
+  protected readonly progress = computed(() => Math.floor(this.record().percent));
 
   private readonly stageIndex = computed(() => {
     if (this.pending()) return -1;
-    const i = STAGES.findIndex((st) => st.id === this.s().stage);
-    return i < 0 ? 0 : i;
+    const p = this.record().percent;
+    const i = STAGES.findIndex((st) => p < st.to);
+    return i < 0 ? STAGES.length - 1 : i;
+  });
+
+  /** "Fragmentul 3 din 7" / "Lotul 2 din 5" from the backend's current step, if any. */
+  private readonly counter = computed(() => {
+    const m = STEP_COUNTER.exec(this.record().currentStep ?? '');
+    if (!m) return null;
+    return `${m[1].toLowerCase() === 'чанк' ? 'Fragmentul' : 'Lotul'} ${m[2]} din ${m[3]}`;
   });
 
   protected readonly meta = computed(() => {
     const r = this.record();
     const sent = fmtDate(r.createdAt).replace('Azi, ', 'azi la ');
-    return `${plural(r.speakersCount, 'vorbitor', 'vorbitori')} · ${fmtDur(r.durationSec)} · ${fmtSize(r.sizeBytes)} · Trimis ${sent}`;
+    const speakers = r.speakersCount
+      ? plural(r.speakersCount, 'vorbitor', 'vorbitori') + ' · '
+      : '';
+    return `${speakers}${fmtDur(r.durationSec ?? 0)} · ${fmtSize(r.sizeBytes)} · Trimis ${sent}`;
   });
 
   protected readonly headline = computed(() =>
@@ -55,30 +60,21 @@ export class ProcessingView {
   protected readonly subline = computed(() => {
     const stage = STAGES[Math.max(0, this.stageIndex())];
     if (this.failed()) return `Eșuat la etapa: ${stage.name.toLowerCase()}`;
-    if (this.pending()) {
-      const q = this.s().queuePosition;
-      return (
-        'Procesarea începe imediat ce există capacitate disponibilă' +
-        (q ? ` · poziția ${q} în coadă` : '')
-      );
-    }
-    return stage.id === 'speaker_identification'
-      ? `Separarea a ${this.record().speakersCount} voci`
-      : stage.desc;
+    if (this.pending()) return 'Procesarea începe imediat ce există capacitate disponibilă';
+    const counter = this.counter();
+    return counter ? `${stage.desc} · ${counter}` : stage.desc;
   });
 
-  protected readonly eta = computed(() => {
-    if (this.failed()) return 'Oprit';
-    if (this.pending()) return 'Neînceput';
-    const eta = this.s().etaSec;
-    if (eta === undefined) return 'Se estimează timpul rămas…';
-    return eta > 60
-      ? `Aproximativ ${Math.ceil(eta / 60)} min rămase`
-      : `Aproximativ ${eta} sec rămase`;
-  });
+  protected readonly foot = computed(() =>
+    this.failed()
+      ? 'Oprit'
+      : this.pending()
+        ? 'Neînceput'
+        : 'Durează câteva minute · puteți părăsi pagina',
+  );
 
   protected readonly errorMessage = computed(
-    () => this.s().error?.message ?? this.record().error?.message ?? '',
+    () => this.record().error ?? 'Motivul nu a fost raportat de server.',
   );
 
   protected readonly wave = computed(() => {
@@ -102,15 +98,13 @@ export class ProcessingView {
   protected readonly stages = computed(() => {
     const idx = this.stageIndex(),
       failed = this.failed(),
-      speakers = this.record().speakersCount;
+      p = this.record().percent;
     return STAGES.map((st, i) => {
       const state = i < idx ? 'done' : i === idx ? (failed ? 'failed' : 'active') : 'todo';
+      const within = Math.floor(((p - st.from) / (st.to - st.from)) * 100);
       return {
         name: st.name,
-        desc:
-          st.id === 'speaker_identification'
-            ? `Separarea și etichetarea a ${speakers} voci`
-            : st.desc,
+        desc: st.desc,
         state,
         right:
           state === 'done'
@@ -118,7 +112,7 @@ export class ProcessingView {
             : state === 'failed'
               ? 'Eșuat'
               : state === 'active'
-                ? `${Math.floor(this.s().stageProgress ?? 0)}%`
+                ? `${Math.max(0, Math.min(100, within))}%`
                 : 'În așteptare',
       };
     });

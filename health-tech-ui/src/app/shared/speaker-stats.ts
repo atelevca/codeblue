@@ -1,9 +1,12 @@
-// getSpeakers is frontend-only (schema.md): talk time, share and a sample quote are mocked,
-// deterministically per record so they stay stable across renders.
-import { PEOPLE, SNIPPETS } from './catalog';
-import { hashText, seededRandom } from './format';
+// Per-speaker figures computed from the transcript (`GET /jobs/{id}/result`). Speaker suggestions
+// stay a frontend stub: the backend has no people directory yet.
+import { TranscriptResult } from '../api/models';
+import { PEOPLE } from './catalog';
+import { hashText } from './format';
 
 export interface SpeakerStat {
+  /** Label from the backend, e.g. `Speaker 1`. */
+  label: string;
   /** Talk time in seconds. */
   talkSec: number;
   pct: number;
@@ -12,38 +15,26 @@ export interface SpeakerStat {
   quote: string;
 }
 
-export function speakerStats(
-  recordId: string,
-  speakers: number,
-  durationSec: number,
-): SpeakerStat[] {
-  const r = seededRandom(recordId + speakers);
-  const weights = Array.from({ length: speakers }, (_, i) => 0.35 + r() * (i === 0 ? 1.4 : 1));
-  const total = weights.reduce((a, b) => a + b, 0);
-  const talk = Array<number>(speakers).fill(0);
-  const first = Array<number>(speakers).fill(-1);
-  let t = 0,
-    prev = -1;
-  while (t < 100) {
-    let sp: number;
-    do {
-      let x = r() * total;
-      sp = 0;
-      while (x > weights[sp]) x -= weights[sp++];
-    } while (sp === prev && speakers > 1);
-    const len = Math.min(0.5 + r() * 2.6, 100 - t);
-    if (first[sp] < 0) first[sp] = t;
-    talk[sp] += len;
-    t += len + (r() < 0.35 ? r() * 0.7 : 0);
-    prev = sp;
+const QUOTE_MAX = 140;
+
+export function speakerStats(result: TranscriptResult): SpeakerStat[] {
+  const talk = result.speakers.map(() => 0);
+  const first = result.speakers.map(() => -1);
+  const quote = result.speakers.map(() => '');
+  for (const t of result.turns) {
+    const i = result.speakers.indexOf(t.speaker);
+    if (i < 0) continue;
+    talk[i] += Math.max(0, t.end - t.start);
+    if (first[i] < 0) first[i] = t.start;
+    if (!quote[i] && t.text.trim()) quote[i] = t.text.trim();
   }
   const sum = talk.reduce((a, b) => a + b, 0) || 1;
-  const h = hashText(recordId);
-  return talk.map((v, i) => ({
-    talkSec: (durationSec * v) / sum,
-    pct: Math.round((v / sum) * 100),
-    firstSec: (Math.max(0, first[i]) / 100) * durationSec,
-    quote: SNIPPETS[(h + i) % SNIPPETS.length],
+  return result.speakers.map((label, i) => ({
+    label,
+    talkSec: talk[i],
+    pct: Math.round((talk[i] / sum) * 100),
+    firstSec: Math.max(0, first[i]),
+    quote: quote[i].length > QUOTE_MAX ? quote[i].slice(0, QUOTE_MAX - 1) + '…' : quote[i],
   }));
 }
 

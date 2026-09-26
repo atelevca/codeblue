@@ -14,9 +14,9 @@
     </svg>
   </div>
   <div style="flex: 1; min-width: 240px">
-    <h1>Procesul-verbal al întâlnirii este gata</h1>
+    <h1>{{ doc() ? 'Procesul-verbal al întâlnirii este gata' : 'Transcrierea este gata' }}</h1>
     <div style="color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere">
-      {{ record().title }} · {{ readyDate() }}
+      {{ title() }} · {{ readyDate() }}
     </div>
   </div>
   <a class="btn btn--lg" routerLink="/new">
@@ -46,124 +46,169 @@
       "
     >
       <div class="doc__eyebrow mono">Proces-verbal · {{ typeLabel() }}</div>
-      <div style="display: flex; align-items: center; gap: 10px">
-        @if (translatingTo(); as tl) {
-          <span class="translating"
-            ><span class="dot pulse"></span>Se traduce în {{ langName(tl) }}…</span
-          >
-        }
-        <div class="seg">
-          @for (l of langs; track l.code) {
-            <button [class.on]="lang() === l.code" [title]="l.name" (click)="pickLang(l.code)">
-              {{ l.label }}
-            </button>
-          }
-        </div>
-      </div>
+      @if (doc()) {
+        <button class="btn btn--ghost regen" (click)="generate()">Regenerează</button>
+      }
     </div>
 
-    <div class="doc__body" [class.dim]="translatingTo()">
-      <input
-        class="doc__title"
-        title="Redenumește"
-        maxlength="120"
-        [value]="record().title"
-        (change)="rename($event)"
-        (keydown.enter)="$any($event.target).blur()"
-      />
-      <div style="color: var(--text-3); font-size: 13px; margin-top: 6px">{{ meta() }}</div>
-      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px">
-        @for (n of names(); track $index) {
-          <span class="chip"
-            ><span class="dot" [style.background]="colors[$index]"></span>{{ n }}</span
-          >
-        }
-      </div>
+    <div class="doc__title">{{ title() }}</div>
+    <div style="color: var(--text-3); font-size: 13px; margin-top: 6px">{{ meta() }}</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px">
+      @for (n of names(); track $index) {
+        <span class="chip"
+          ><span class="dot" [style.background]="colors()[$index]"></span>{{ n }}</span
+        >
+      }
+    </div>
 
-      <div class="sep"></div>
+    <div class="sep"></div>
 
-      @if (mom(); as m) {
-        <div class="eyebrow">{{ m.sectionTitles.summary }}</div>
-        <p class="summary">{{ m.summary }}</p>
-
-        <div class="eyebrow gap">{{ m.sectionTitles.decisions }}</div>
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px">
-          @for (d of m.decisions; track $index) {
-            <div style="display: flex; gap: 12px; align-items: flex-start">
-              <span class="num mono">{{ $index + 1 }}</span>
-              <span style="font-size: 15px; line-height: 1.5; padding-top: 1px">{{ d }}</span>
-            </div>
-          }
-        </div>
-
-        @if (actions().length) {
-          <div class="eyebrow gap">{{ m.sectionTitles.actions }}</div>
-          <ul class="actions">
-            @for (a of actions(); track $index) {
-              <li>
-                {{ a.task }}<span style="color: var(--text-3)"> — {{ a.owner }}, {{ a.due }}</span>
-              </li>
+    @switch (state().kind) {
+      @case ('ready') {
+        @if (verification(); as v) {
+          <div [class]="'verify verify--' + v.tone">
+            <div class="verify__label">{{ v.label }}</div>
+            @if (v.summary) {
+              <div class="verify__summary">{{ v.summary }}</div>
             }
-          </ul>
-        }
-
-        <div class="eyebrow gap">{{ m.sectionTitles.topics }}</div>
-        <div style="display: flex; flex-direction: column; margin-top: 6px">
-          @for (t of topics(); track $index) {
-            <div class="topic">
-              <span class="mono" style="font-size: 12px; color: var(--text-3); padding-top: 2px">{{
-                t.ts
-              }}</span>
-              <div>
-                <div style="font-weight: 500; font-size: 15px">{{ t.title }}</div>
-                <div
-                  style="
-                    color: var(--text-2);
-                    margin-top: 3px;
-                    line-height: 1.55;
-                    text-wrap: pretty;
-                  "
-                >
-                  {{ t.note }}
-                </div>
+            @for (f of v.findings; track $index) {
+              <div class="finding">
+                <div class="finding__kind mono">{{ f.kindLabel }}</div>
+                <div>{{ f.description }}</div>
+                @if (f.documentQuote) {
+                  <div class="finding__quote"><b>Document:</b> „{{ f.documentQuote }}”</div>
+                }
+                @if (f.transcriptQuote) {
+                  <div class="finding__quote"><b>Transcriere:</b> „{{ f.transcriptQuote }}”</div>
+                }
+                @if (f.suggestedCorrection) {
+                  <div class="finding__quote">
+                    <b>Corectură propusă:</b> {{ f.suggestedCorrection }}
+                  </div>
+                }
               </div>
+            }
+          </div>
+        }
+        <div class="md-doc">
+          @for (l of lines(); track $index) {
+            <div [class]="'md md--' + l.kind" [style.margin-left.px]="l.indent * 20">
+              @if (l.kind === 'bullet') {
+                <span class="md__mark">•</span>
+              } @else if (l.kind === 'ordered') {
+                <span class="md__mark mono">{{ l.n }}.</span>
+              }
+              <span>
+                @for (r of l.runs; track $index) {
+                  @if (r.link) {
+                    <a [href]="r.link" target="_blank" rel="noopener">{{ r.text }}</a>
+                  } @else {
+                    <span [class.b]="r.bold" [class.i]="r.italic" [class.u]="r.underline">{{
+                      r.text
+                    }}</span>
+                  }
+                }
+              </span>
             </div>
           }
         </div>
-      } @else if (momError(); as err) {
-        <div class="alert-error">
-          <div class="alert-error__icon">!</div>
-          <div class="alert-error__msg" style="margin: 0">{{ err }}</div>
+      }
+      @case ('missing') {
+        <div class="gen">
+          <div style="font-weight: 500; font-size: 15px">
+            Procesul-verbal nu a fost generat încă
+          </div>
+          <div class="gen__hint">
+            Generarea durează 6–10 minute: modelul extrage faptele din transcriere, redactează
+            documentul și îl verifică cu transcrierea. Puteți naviga în aplicație între timp — vă
+            anunțăm când este gata.
+          </div>
+          <button class="btn btn--dark" style="margin-top: 14px" (click)="generate()">
+            Generează procesul-verbal
+          </button>
         </div>
-      } @else {
+      }
+      @case ('generating') {
+        <div class="gen">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <span class="dot pulse" style="background: var(--accent-2)"></span>Se generează
+            procesul-verbal · <span class="mono">{{ elapsed() }}</span>
+          </div>
+          <div class="gen__hint">
+            De obicei durează 6–10 minute. Puteți naviga în aplicație, dar nu reîncărcați pagina:
+            generarea s-ar întrerupe.
+          </div>
+        </div>
+      }
+      @case ('error') {
+        @if (errorState(); as s) {
+          <div class="alert-error">
+            <div class="alert-error__icon">!</div>
+            <div style="flex: 1">
+              <div class="alert-error__msg" style="margin: 0">{{ s.message }}</div>
+              @if (s.canGenerate) {
+                <button class="btn" style="margin-top: 10px" (click)="generate()">
+                  Încearcă din nou
+                </button>
+              }
+            </div>
+          </div>
+        }
+      }
+      @default {
         <div class="loading">
           <span class="dot pulse" style="background: var(--accent-2)"></span>Se încarcă
           procesul-verbal…
         </div>
       }
+    }
+
+    <div class="sep"></div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+      <div class="eyebrow">Transcriere</div>
+      @if (result(); as r) {
+        <button class="btn btn--ghost regen" (click)="transcriptOpen.set(!transcriptOpen())">
+          {{ transcriptOpen() ? 'Ascunde' : 'Arată ' + r.turns.length + ' replici' }}
+        </button>
+      }
     </div>
+    @if (resultError(); as err) {
+      <div style="color: var(--text-3); margin-top: 10px">{{ err }}</div>
+    } @else if (!result()) {
+      <div class="loading">Se încarcă transcrierea…</div>
+    } @else if (transcriptOpen()) {
+      <div style="margin-top: 8px">
+        @for (t of turns(); track $index) {
+          <div class="turn">
+            <span class="mono turn__time">{{ t.time }}</span>
+            <div style="min-width: 0">
+              <div class="turn__who">
+                <span class="dot" [style.background]="t.color"></span>{{ t.name }}
+              </div>
+              <div class="turn__text">{{ t.text }}</div>
+            </div>
+          </div>
+        }
+      </div>
+    }
   </article>
 
   <div class="side">
     <div class="card" style="padding: 20px">
       <div style="font-weight: 500">Exportă procesul-verbal</div>
-      <div class="seg formats">
-        @for (f of formats; track f) {
-          <button class="mono" [class.on]="format() === f" (click)="pickFormat(f)">{{ f }}</button>
-        }
-      </div>
       <div
         class="mono"
         style="font-size: 12px; color: var(--text-3); margin-top: 10px; overflow-wrap: anywhere"
       >
-        {{ docName() }}
+        {{ doc() ? docName() : 'Disponibil după generarea procesului-verbal' }}
       </div>
       <button
         class="download"
         [class.done]="download() === 'done'"
         [class.busy]="download() === 'preparing'"
-        [disabled]="!mom()"
-        (click)="exportFile()"
+        [disabled]="!doc()"
+        (click)="exportPdf()"
       >
         <svg
           width="16"
@@ -182,7 +227,7 @@
             ? 'Se pregătește…'
             : download() === 'done'
               ? 'Descărcat · descarcă din nou'
-              : 'Descarcă ' + format()
+              : 'Descarcă PDF'
         }}
       </button>
       <div
@@ -193,7 +238,7 @@
           margin-top: 8px;
         "
       >
-        <button class="btn side-btn" [disabled]="!mom()" (click)="emailOpen.set(true)">
+        <button class="btn side-btn" [disabled]="!doc()" (click)="emailOpen.set(true)">
           <svg
             width="14"
             height="14"
@@ -208,13 +253,13 @@
             <path d="M2.5 4.5L8 8.5l5.5-4"></path></svg
           >Trimite pe e-mail
         </button>
-        <button class="btn side-btn" [disabled]="!mom()" (click)="copyText()">
+        <button class="btn side-btn" [disabled]="!doc()" (click)="copyText()">
           {{ copied() ? 'Copiat ✓' : 'Copiază ca text' }}
         </button>
       </div>
     </div>
 
-    <app-speaker-panel [record]="record()" [(expanded)]="mappingExpanded" />
+    <app-speaker-panel [record]="record()" [result]="result()" [(expanded)]="mappingExpanded" />
 
     <div class="card" style="padding: 6px 20px">
       @for (d of details(); track d.k) {
@@ -230,9 +275,7 @@
 @if (emailOpen()) {
   <app-email-dialog
     [record]="record()"
-    [format]="format()"
-    [lang]="lang()"
-    [docName]="docName()"
+    [docText]="plainText()"
     (closed)="emailOpen.set(false)"
     (openMapping)="openMappingFromEmail()"
   />

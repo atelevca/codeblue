@@ -1,21 +1,19 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription, forkJoin, interval, catchError, of } from 'rxjs';
 import { STATUS_POLL_MS } from '../api/api.config';
-import { ID, ProcessingStatus } from '../api/models';
+import { ID, Job } from '../api/models';
 import { ResonaApi } from '../api/resona-api';
+import { stripExt } from '../shared/format';
 import { Toasts } from './toasts';
 
-export interface TrackedRecord {
-  id: ID;
-  title: string;
-  status: ProcessingStatus;
-}
+export const isActive = (j: Job) => j.status === 'Pending' || j.status === 'Running';
 
-const isActive = (s: ProcessingStatus) => s.status === 'pending' || s.status === 'processing';
+export const jobTitle = (j: Job) => j.title?.trim() || stripExt(j.fileName);
 
 /**
- * Polls getProcessingStatus for records processed in this session. Feeds the "În curs" sidebar,
- * the processing screen and the "ready" / "failed" toasts.
+ * Polls `GET /jobs/{id}` for records being processed. Feeds the "În curs" sidebar, the
+ * processing screen and the "ready" / "failed" toasts. On start it picks up the records the
+ * backend is already processing, so a page reload does not lose them.
  */
 @Injectable({ providedIn: 'root' })
 export class ProcessingTracker {
@@ -23,28 +21,26 @@ export class ProcessingTracker {
   private readonly toasts = inject(Toasts);
   private poll?: Subscription;
 
-  private readonly records = signal<Record<ID, TrackedRecord>>({});
+  private readonly jobs = signal<Record<ID, Job>>({});
   /** Record currently open on screen; its completion does not raise a toast. */
   readonly viewing = signal<ID | null>(null);
 
-  readonly active = computed(() => Object.values(this.records()).filter((r) => isActive(r.status)));
+  readonly active = computed(() => Object.values(this.jobs()).filter(isActive));
 
-  statusOf(id: ID): ProcessingStatus | undefined {
-    return this.records()[id]?.status;
+  constructor() {
+    this.api.listJobs().subscribe({
+      next: (list) => list.filter(isActive).forEach((j) => this.track(j)),
+      error: () => undefined,
+    });
   }
 
-  track(id: ID, title: string, status: ProcessingStatus): void {
-    this.set({ id, title, status });
-    if (isActive(status)) this.ensurePolling();
+  jobOf(id: ID): Job | undefined {
+    return this.jobs()[id];
   }
 
-  rename(id: ID, title: string): void {
-    const r = this.records()[id];
-    if (r) this.set({ ...r, title });
-  }
-
-  private set(r: TrackedRecord): void {
-    this.records.update((m) => ({ ...m, [r.id]: r }));
+  track(job: Job): void {
+    this.jobs.update((m) => ({ ...m, [job.id]: job }));
+    if (isActive(job)) this.ensurePolling();
   }
 
   private ensurePolling(): void {
@@ -58,34 +54,32 @@ export class ProcessingTracker {
       this.poll?.unsubscribe();
       return;
     }
-    forkJoin(
-      active.map((r) => this.api.getProcessingStatus(r.id).pipe(catchError(() => of(r.status)))),
-    ).subscribe((statuses) =>
-      statuses.forEach((status, i) => {
-        const r = active[i];
-        this.set({ ...r, status });
-        if (!isActive(status)) this.notify(r, status);
-      }),
+    forkJoin(active.map((j) => this.api.getJob(j.id).pipe(catchError(() => of(j))))).subscribe(
+      (jobs) =>
+        jobs.forEach((job) => {
+          this.track(job);
+          if (!isActive(job)) this.notify(job);
+        }),
     );
   }
 
-  private notify(r: TrackedRecord, status: ProcessingStatus): void {
-    const viewing = this.viewing() === r.id;
-    if (status.status === 'completed' && !viewing)
+  private notify(job: Job): void {
+    const viewing = this.viewing() === job.id;
+    if (job.status === 'Completed' && !viewing)
       this.toasts.show({
         kind: 'success',
-        title: 'Proces-verbal gata',
-        body: r.title,
+        title: 'Transcriere gata',
+        body: jobTitle(job),
         actionLabel: 'Vezi rezultatul',
-        recordId: r.id,
+        recordId: job.id,
       });
-    if (status.status === 'failed')
+    if (job.status === 'Failed')
       this.toasts.show({
         kind: 'error',
         title: 'Procesare eșuată',
-        body: r.title,
+        body: jobTitle(job),
         actionLabel: viewing ? undefined : 'Vezi detalii',
-        recordId: r.id,
+        recordId: job.id,
       });
   }
 }

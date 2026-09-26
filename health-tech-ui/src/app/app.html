@@ -30,7 +30,7 @@
         @for (r of tracker.active(); track r.id) {
           <button class="sidebar__job" [routerLink]="['/rec', r.id]">
             <div style="display: flex; align-items: center; gap: 8px; width: 100%">
-              @if (r.status.status === 'pending') {
+              @if (r.status === 'Pending') {
                 <span class="dot" style="background: var(--text-4)"></span>
               } @else {
                 <span class="dot pulse" style="background: var(--accent)"></span>
@@ -39,13 +39,13 @@
                 class="ellipsis"
                 style="flex: 1; min-width: 0; font-size: 13px; color: var(--text)"
               >
-                {{ r.title }}
+                {{ title(r) }}
               </div>
               <div class="mono" style="font-size: 11px; color: var(--text-3)">
-                {{ r.status.status === 'pending' ? 'În coadă' : r.status.progress + '%' }}
+                {{ r.status === 'Pending' ? 'În coadă' : r.percent + '%' }}
               </div>
             </div>
-            <div class="bar"><div [style.width.%]="r.status.progress"></div></div>
+            <div class="bar"><div [style.width.%]="r.percent"></div></div>
           </button>
         }
       </div>

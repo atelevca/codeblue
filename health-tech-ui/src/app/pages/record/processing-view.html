@@ -1,6 +1,6 @@
 <div class="wrap">
   <div class="title-row">
-    <h1>{{ record().title }}</h1>
+    <h1>{{ title() }}</h1>
     @if (failed()) {
       <span class="badge badge--failed"><span class="dot"></span>Eșuat</span>
     } @else if (pending()) {
@@ -29,7 +29,7 @@
       }
     </div>
     <div class="mono foot">
-      <span>{{ eta() }}</span
+      <span>{{ foot() }}</span
       ><span>{{ record().id }}</span>
     </div>
 
@@ -38,10 +38,7 @@
         <div class="alert-error__title">Nu am putut finaliza această înregistrare</div>
         <div class="alert-error__msg" style="margin-top: 3px">{{ errorMessage() }}</div>
         <div style="display: flex; gap: 8px; margin-top: 14px">
-          <button class="btn btn--dark" (click)="retry.emit()">Reia procesarea</button>
-          <a class="btn" routerLink="/new" style="border-color: oklch(0.88 0.05 25)"
-            >Încarcă alt fișier</a
-          >
+          <a class="btn btn--dark" routerLink="/new">Încarcă fișierul din nou</a>
         </div>
       </div>
     }

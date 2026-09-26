@@ -8,11 +8,10 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { RecordDetails } from '../../api/models';
+import { Job } from '../../api/models';
 import { ResonaApi, toApiError } from '../../api/resona-api';
 import { Breadcrumb } from '../../state/breadcrumb';
-import { ProcessingTracker } from '../../state/processing-tracker';
-import { Toasts } from '../../state/toasts';
+import { ProcessingTracker, isActive, jobTitle } from '../../state/processing-tracker';
 import { ProcessingView } from './processing-view';
 import { MomView } from './mom-view';
 
@@ -28,11 +27,11 @@ import { MomView } from './mom-view';
           <div class="alert-error__msg">{{ err }}</div>
         </div>
       </div>
-    } @else if (record(); as rec) {
-      @if (rec.status === 'completed') {
-        <app-mom-view [record]="rec" (renamed)="onRenamed($event)" />
+    } @else if (job(); as j) {
+      @if (j.status === 'Completed') {
+        <app-mom-view [record]="j" />
       } @else {
-        <app-processing-view [record]="rec" [status]="status()" (retry)="retry()" />
+        <app-processing-view [record]="j" />
       }
     }
   `,
@@ -40,75 +39,38 @@ import { MomView } from './mom-view';
 export class RecordPage {
   private readonly api = inject(ResonaApi);
   private readonly tracker = inject(ProcessingTracker);
-  private readonly toasts = inject(Toasts);
   private readonly crumb = inject(Breadcrumb);
 
   /** Route param (`rec/:id`). */
   readonly id = input.required<string>();
 
-  protected readonly record = signal<RecordDetails | null>(null);
+  private readonly loaded = signal<Job | null>(null);
   protected readonly loadError = signal<string | null>(null);
-  protected readonly status = computed(() => this.tracker.statusOf(this.id()));
+
+  /** The tracker's copy while it polls, otherwise the one loaded here. */
+  protected readonly job = computed(() => {
+    const loaded = this.loaded();
+    if (!loaded || loaded.id !== this.id()) return null;
+    return this.tracker.jobOf(loaded.id) ?? loaded;
+  });
 
   constructor() {
     effect(() => {
       const id = this.id();
       untracked(() => this.load(id));
     });
-
-    // The tracker reports completion or failure → reload the record details.
-    effect(() => {
-      const s = this.status();
-      const rec = untracked(this.record);
-      if (s && rec && rec.id === s.recordId && s.status !== rec.status) {
-        if (s.status === 'completed' || s.status === 'failed') untracked(() => this.load(rec.id));
-        else this.record.set({ ...rec, status: s.status, progress: s.progress });
-      }
-    });
-
     inject(DestroyRef).onDestroy(() => this.tracker.viewing.set(null));
-  }
-
-  protected retry(): void {
-    const rec = this.record();
-    if (!rec) return;
-    this.api.retryProcessing(rec.id).subscribe({
-      next: (status) => {
-        this.tracker.track(rec.id, rec.title, status);
-        this.record.set({
-          ...rec,
-          status: status.status,
-          progress: status.progress,
-          error: undefined,
-        });
-      },
-      error: (e) => this.toasts.error('Nu am putut relua procesarea', toApiError(e).message),
-    });
-  }
-
-  protected onRenamed(title: string): void {
-    const rec = this.record();
-    if (!rec) return;
-    this.record.set({ ...rec, title });
-    this.crumb.set('Înregistrări', title);
-    this.tracker.rename(rec.id, title);
   }
 
   private load(id: string): void {
     this.tracker.viewing.set(id);
     this.loadError.set(null);
-    if (this.record()?.id !== id) this.record.set(null);
-    this.api.getRecord(id).subscribe({
-      next: (rec) => {
-        this.record.set(rec);
-        this.crumb.set('Înregistrări', rec.title);
-        const known = this.tracker.statusOf(id);
-        if (known && known.status === rec.status) return;
-        // Opened directly (e.g. after a reload): fetch the stage details and start polling.
-        if (rec.status !== 'completed')
-          this.api.getProcessingStatus(id).subscribe((s) => this.tracker.track(id, rec.title, s));
-        else
-          this.tracker.track(id, rec.title, { recordId: id, status: 'completed', progress: 100 });
+    this.api.getJob(id).subscribe({
+      next: (job) => {
+        this.loaded.set(job);
+        this.crumb.set('Înregistrări', jobTitle(job));
+        // Opened directly (e.g. after a reload): start polling it.
+        if (isActive(job) || this.tracker.jobOf(id)) this.tracker.track(job);
       },
       error: (e) => this.loadError.set(toApiError(e).message),
     });

@@ -53,19 +53,6 @@ export function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** Deterministic PRNG so mocked per-record visuals stay stable. */
-export function seededRandom(seedText: string): () => number {
-  let s = hashText(seedText) || 1;
-  return () => {
-    s ^= s << 13;
-    s >>>= 0;
-    s ^= s >>> 17;
-    s ^= s << 5;
-    s >>>= 0;
-    return s / 4294967296;
-  };
-}
-
 export function hashText(text: string): number {
   let h = 2166136261;
   for (const c of text) {
