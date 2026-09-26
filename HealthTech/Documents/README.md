@@ -90,3 +90,8 @@ clientul apelează `save` după finalizarea transcrierii.
 PDF-ul folosește PDFsharp/MigraDoc și fonturi locale: Arial pe Windows sau DejaVu Sans
 pe Linux. `Documents:FontDirectory` poate indica directorul fonturilor; în lipsa lor
 exportul returnează 503. Nu sunt descărcate fonturi sau resurse externe la export.
+
+Aspectul PDF urmează blanchetul Medpark (`Ghid-de-pregatire-pentru-ecografie-final.pdf`):
+antet pe fiecare pagină cu logo-ul în stânga și motto-ul în dreapta (`Branding/logo.png`,
+`Branding/tagline.png`, incluse ca resurse în assembly), linie turcoaz `#007C84` sub antet,
+titluri turcoaz, texte auxiliare gri `#625C5B`. Conținutul documentului nu este modificat.

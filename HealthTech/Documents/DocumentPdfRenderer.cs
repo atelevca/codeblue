@@ -1,4 +1,5 @@
 using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
 using PdfSharp.Fonts;
 
@@ -13,6 +14,44 @@ public interface IDocumentPdfRenderer
 public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumentPdfRenderer
 {
     private static readonly object RenderLock = new();
+
+    // Цвета и логотип взяты из фирменного бланка Medpark (Ghid-de-pregatire-pentru-ecografie-final.pdf).
+    private static readonly Color BrandTeal = new(0x00, 0x7C, 0x84);
+    private static readonly Color BrandGray = new(0x62, 0x5C, 0x5B);
+    private static readonly string Logo = LoadBrandImage("Branding.logo.png");
+    private static readonly string Tagline = LoadBrandImage("Branding.tagline.png");
+
+    private static string LoadBrandImage(string resource)
+    {
+        using var stream = typeof(DocumentPdfRenderer).Assembly.GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException($"Embedded resource {resource} is missing.");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return "base64:" + Convert.ToBase64String(buffer.ToArray());
+    }
+
+    /// <summary>Logo on the left, tagline on the right and a teal rule under them, on every page.</summary>
+    private static void AddBrandHeader(Section section)
+    {
+        var table = section.Headers.Primary.AddTable();
+        table.Borders.Visible = false;
+        table.AddColumn(Unit.FromCentimeter(8.7));
+        table.AddColumn(Unit.FromCentimeter(8.7));
+        var row = table.AddRow();
+        row.VerticalAlignment = VerticalAlignment.Center;
+        row.Borders.Bottom.Visible = true;
+        row.Borders.Bottom.Color = BrandTeal;
+        row.Borders.Bottom.Width = Unit.FromPoint(1);
+        row.BottomPadding = Unit.FromPoint(6);
+        var logo = row.Cells[0].AddParagraph().AddImage(Logo);
+        logo.Width = Unit.FromCentimeter(5.8);
+        logo.LockAspectRatio = true;
+        var taglineParagraph = row.Cells[1].AddParagraph();
+        taglineParagraph.Format.Alignment = ParagraphAlignment.Right;
+        var tagline = taglineParagraph.AddImage(Tagline);
+        tagline.Width = Unit.FromCentimeter(4.1);
+        tagline.LockAspectRatio = true;
+    }
 
     public byte[] Render(SavedDocument saved)
     {
@@ -34,20 +73,34 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
                 style.Font.Name = "DocumentSans";
                 style.Font.Size = level == 1 ? 20 : 13;
                 style.Font.Bold = true;
+                style.Font.Color = BrandTeal;
                 style.ParagraphFormat.SpaceBefore = Unit.FromPoint(12);
                 style.ParagraphFormat.SpaceAfter = Unit.FromPoint(6);
                 style.ParagraphFormat.KeepWithNext = true;
             }
+            var title = document.Styles["Heading1"]!.ParagraphFormat;
+            title.Borders.Bottom.Color = BrandTeal;
+            title.Borders.Bottom.Width = Unit.FromPoint(1);
+            title.Borders.DistanceFromBottom = Unit.FromPoint(3);
+            // Heading2..6 inherit from Heading1; the rule belongs to the title only.
+            document.Styles["Heading2"]!.ParagraphFormat.Borders.Visible = false;
+            document.Styles[StyleNames.Hyperlink]!.Font.Color = BrandTeal;
 
             var section = document.AddSection();
             section.PageSetup.PageFormat = PageFormat.A4;
-            section.PageSetup.TopMargin = Unit.FromCentimeter(1.8);
+            section.PageSetup.HeaderDistance = Unit.FromCentimeter(0.9);
+            section.PageSetup.TopMargin = Unit.FromCentimeter(3.0);
             section.PageSetup.BottomMargin = Unit.FromCentimeter(1.8);
             section.PageSetup.LeftMargin = Unit.FromCentimeter(1.8);
             section.PageSetup.RightMargin = Unit.FromCentimeter(1.8);
+            AddBrandHeader(section);
             var footer = section.Footers.Primary.AddParagraph();
             footer.Format.Font.Size = 8;
+            footer.Format.Font.Color = BrandGray;
             footer.Format.Alignment = ParagraphAlignment.Right;
+            footer.Format.Borders.Top.Color = BrandTeal;
+            footer.Format.Borders.Top.Width = Unit.FromPoint(0.5);
+            footer.Format.Borders.DistanceFromTop = Unit.FromPoint(3);
             footer.AddText("Pagina ");
             footer.AddPageField();
             footer.AddText(" / ");
@@ -61,7 +114,7 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
                     ? "Verificare automată: fără discrepanțe raportate."
                     : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe - necesită revizuire.");
             status.Format.Font.Size = 8;
-            status.Format.Font.Color = Colors.Gray;
+            status.Format.Font.Color = BrandGray;
             AddDelta(section, saved.Delta);
 
             var renderer = new PdfDocumentRenderer { Document = document };

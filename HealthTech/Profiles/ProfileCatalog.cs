@@ -24,6 +24,9 @@ namespace HealthTech.Profiles
             "Normal Moldovan mixed speech (NOT errors, keep these words exactly as written; use only to understand the sentence):";
         private const string PhoneticHeading =
             "Known ASR mishearings (left = what the recognizer produces, right = the correct form):";
+        private const string Icd10Heading =
+            "Reference ICD-10 diagnoses (code | name | chapter; names are written WITHOUT diacritics - use them only " +
+            "to recognize misheard diagnosis names, never remove diacritics from the text; do not insert codes):";
 
         private readonly Dictionary<string, RecordProfile> _profiles;
 
@@ -47,7 +50,11 @@ namespace HealthTech.Profiles
                     {
                         throw new InvalidOperationException($"Профиль '{key}': не найден глоссарий '{path}'.");
                     }
-                    glossaries.Add(Glossary.Load(path, HeadingFor(file)));
+                    var glossary = IsIcd10(file)
+                        ? Icd10Glossary.Load(path, Icd10Heading)
+                        : Glossary.Load(path, HeadingFor(file));
+                    glossaries.Add(glossary);
+                    logger.LogInformation("Профиль {Profile}: глоссарий {File} - {Count} строк", key, file, glossary.Count);
                 }
 
                 _profiles[key] = new RecordProfile(key, definition.DisplayName, definition.WhisperPrompt,
@@ -71,6 +78,11 @@ namespace HealthTech.Profiles
                 ? profile
                 : throw new AudioProcessingException(AudioProcessingError.UnknownProfile,
                     $"Неизвестный тип записи '{key}'. Доступные: {string.Join(", ", _profiles.Keys)}.");
+
+        // diagnostics.csv - выгрузка МКБ-10 (три файла, разделитель ';'); subclasses.csv и classes.csv
+        // читаются из той же папки и в список глоссариев профиля не попадают.
+        private static bool IsIcd10(string fileName) =>
+            fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
 
         // Списки подключаются одинаково, но означают разное, поэтому и заголовки разные:
         // термины - что искать, нормальная речь - что не трогать, фонетика - что чем заменять.
