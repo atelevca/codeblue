@@ -19,6 +19,13 @@ namespace HealthTech.Audio
         /// expected by Whisper, sherpa and the VAD. Returns its path; the source WAV is left untouched.
         /// </summary>
         Task<string> PrepareModelInputAsync(string wavPath, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Разбирает файл через ffprobe и возвращает контейнер и длительность, ничего не конвертируя
+        /// и ничего не записывая. Нужен на загрузке: UI показывает карточку файла до того,
+        /// как пользователь оформит запись и начнётся обработка.
+        /// </summary>
+        Task<AudioFileInfo> InspectAsync(string inputPath, CancellationToken cancellationToken = default);
     }
 
     public class AudioProcessor : IAudioProcessor
@@ -93,6 +100,20 @@ namespace HealthTech.Audio
 
             return new ProcessedAudio(fullInputPath, wavPath, probe.Format, probe.Codec, probe.SampleRate, probe.Channels,
                 Converted: !isPcmWav);
+        }
+
+        public async Task<AudioFileInfo> InspectAsync(string inputPath, CancellationToken cancellationToken = default)
+        {
+            var fullInputPath = Path.GetFullPath(inputPath);
+            if (!File.Exists(fullInputPath))
+            {
+                throw new AudioProcessingException(AudioProcessingError.InputNotFound, $"Input file '{fullInputPath}' does not exist.");
+            }
+
+            var probe = await ProbeAsync(fullInputPath, cancellationToken);
+            _logger.LogInformation("Inspected {InputPath}: format {Format}, duration {Duration} s",
+                fullInputPath, probe.Format, probe.DurationSeconds);
+            return new AudioFileInfo(probe.Format, probe.DurationSeconds);
         }
 
         public async Task<string> PrepareModelInputAsync(string wavPath, CancellationToken cancellationToken = default)
@@ -174,9 +195,18 @@ namespace HealthTech.Audio
             }
 
             // format_name can be a list of aliases, e.g. "mov,mp4,m4a,3gp,3g2,mj2".
-            var format = root.TryGetProperty("format", out var f) ? GetString(f, "format_name") ?? "unknown" : "unknown";
+            var format = "unknown";
+            double? duration = null;
+            if (root.TryGetProperty("format", out var f))
+            {
+                format = GetString(f, "format_name") ?? "unknown";
+                duration = GetSeconds(f, "duration");
+            }
 
-            return new AudioProbe(format, codec, sampleRate.Value, channels.Value,
+            // Не каждый контейнер пишет длительность в format: у сырых потоков её берут из самого потока.
+            duration ??= GetSeconds(a, "duration");
+
+            return new AudioProbe(format, duration, codec, sampleRate.Value, channels.Value,
                 GetString(a, "sample_fmt"), GetInt(a, "bits_per_raw_sample"));
         }
 
@@ -290,6 +320,14 @@ namespace HealthTech.Audio
         private static string? GetString(JsonElement element, string name) =>
             element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
+        // ffprobe отдаёт длительность строкой вида "123.456000" и всегда с точкой, поэтому разбор
+        // строго инвариантный: на ru-RU культуре Parse принял бы точку за разделитель групп.
+        private static double? GetSeconds(JsonElement element, string name) =>
+            double.TryParse(GetString(element, name), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            && value > 0
+                ? value
+                : null;
+
         // ffprobe reports some numbers as strings (e.g. "sample_rate": "44100").
         private static int? GetInt(JsonElement element, string name)
         {
@@ -307,7 +345,7 @@ namespace HealthTech.Audio
                 : null;
         }
 
-        private record AudioProbe(string Format, string Codec, int SampleRate, int Channels, string? SampleFormat, int? BitsPerRawSample);
+        private record AudioProbe(string Format, double? DurationSeconds, string Codec, int SampleRate, int Channels, string? SampleFormat, int? BitsPerRawSample);
 
         private record ProcessResult(int ExitCode, string StdOut, string StdErr);
     }
