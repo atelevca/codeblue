@@ -5,7 +5,7 @@
         <i style="height: 8px"></i><i style="height: 13px"></i><i style="height: 6px"></i
         ><i style="height: 10px"></i>
       </div>
-      Resona
+      CodeBlue
     </div>
     <nav>
       <a routerLink="/new" routerLinkActive="on" class="sidebar__nav">
@@ -21,6 +21,23 @@
           <path d="M8 3v10M3 8h10"></path>
         </svg>
         <span class="ellipsis">Înregistrare nouă</span>
+      </a>
+      <a routerLink="/istoric" class="sidebar__nav" [class.on]="historyActive()">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        >
+          <path d="M3 4h10M3 8h10M3 12h6"></path>
+        </svg>
+        <span class="ellipsis" style="flex: 1; min-width: 0">Istoric</span>
+        <span class="mono" style="font-size: 12px; color: var(--text-3)">{{
+          tracker.all().length
+        }}</span>
       </a>
     </nav>
 

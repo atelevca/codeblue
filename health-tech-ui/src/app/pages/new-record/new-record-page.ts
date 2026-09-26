@@ -1,6 +1,6 @@
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
-import { toApiError } from '../../api/resona-api';
+import { toApiError } from '../../api/codeblue-api';
 import {
   AUDIO_EXTENSIONS,
   MAX_SPEAKERS,

@@ -9,7 +9,7 @@ import {
   untracked,
 } from '@angular/core';
 import { Job } from '../../api/models';
-import { ResonaApi, toApiError } from '../../api/resona-api';
+import { CodeBlueApi, toApiError } from '../../api/codeblue-api';
 import { Breadcrumb } from '../../state/breadcrumb';
 import { ProcessingTracker, isActive, jobTitle } from '../../state/processing-tracker';
 import { ProcessingView } from './processing-view';
@@ -37,7 +37,7 @@ import { MomView } from './mom-view';
   `,
 })
 export class RecordPage {
-  private readonly api = inject(ResonaApi);
+  private readonly api = inject(CodeBlueApi);
   private readonly tracker = inject(ProcessingTracker);
   private readonly crumb = inject(Breadcrumb);
 
@@ -68,7 +68,7 @@ export class RecordPage {
     this.api.getJob(id).subscribe({
       next: (job) => {
         this.loaded.set(job);
-        this.crumb.set('Înregistrări', jobTitle(job));
+        this.crumb.set('Istoric', jobTitle(job));
         // Opened directly (e.g. after a reload): start polling it.
         if (isActive(job) || this.tracker.jobOf(id)) this.tracker.track(job);
       },

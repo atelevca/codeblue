@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ID, SavedDocument } from '../api/models';
-import { ResonaApi, toApiError } from '../api/resona-api';
+import { CodeBlueApi, toApiError } from '../api/codeblue-api';
 import { ProcessingTracker } from './processing-tracker';
 import { Toasts } from './toasts';
 
@@ -18,7 +18,7 @@ export type MinutesState =
  */
 @Injectable({ providedIn: 'root' })
 export class MinutesStore {
-  private readonly api = inject(ResonaApi);
+  private readonly api = inject(CodeBlueApi);
   private readonly toasts = inject(Toasts);
   private readonly tracker = inject(ProcessingTracker);
   private readonly states = signal<Record<ID, MinutesState>>({});

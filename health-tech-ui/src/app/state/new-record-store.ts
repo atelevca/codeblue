@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, Subscription, map, tap } from 'rxjs';
 import { Profile, UploadedFile } from '../api/models';
-import { ResonaApi, toApiError } from '../api/resona-api';
+import { CodeBlueApi, toApiError } from '../api/codeblue-api';
 import {
   AUDIO_EXTENSIONS,
   FALLBACK_PROFILE_KEYS,
@@ -33,7 +33,7 @@ const SAMPLE_NAME = 'Masă rotundă fondatori — ep. 12.wav';
 /** State of the "Înregistrare nouă" flow; kept in a service so it survives navigation. */
 @Injectable({ providedIn: 'root' })
 export class NewRecordStore {
-  private readonly api = inject(ResonaApi);
+  private readonly api = inject(CodeBlueApi);
   private readonly tracker = inject(ProcessingTracker);
   private uploadSub?: Subscription;
 

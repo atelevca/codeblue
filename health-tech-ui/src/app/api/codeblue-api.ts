@@ -25,7 +25,7 @@ export interface ExportedFile {
 
 /** One method per backend endpoint (../docs/ui-integration.md). */
 @Injectable({ providedIn: 'root' })
-export class ResonaApi {
+export class CodeBlueApi {
   private readonly http = inject(HttpClient);
 
   /** GET /profiles — the discussion types for the upload form. */
