@@ -22,11 +22,9 @@ namespace HealthTech.Workflow.Steps
         public string DiarizationPath { get; set; } = "";
         public string SpeakersPath { get; set; } = "";
 
-        protected override bool CompletesJob => true;
-
         protected override string StepName => "Сохранение результата";
-        protected override int PercentAtStart => 98;
-        protected override int PercentWhenDone => 100;
+        protected override int PercentAtStart => 90;
+        protected override int PercentWhenDone => 92;
 
         protected override async Task ExecuteAsync(IStepExecutionContext context)
         {
