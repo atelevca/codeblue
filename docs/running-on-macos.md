@@ -1,9 +1,9 @@
 # Запуск на macOS
 
-**Статус: на Mac ещё никто не запускал.** Разработка идёт под Windows. Ниже — разбор
-по пакетам: всё нужное для macOS в них есть, но это вывод из содержимого пакетов, а не
-отчёт о прогоне. Первый запуск наверняка что-нибудь вскроет; места, где это вероятнее
-всего, помечены ниже.
+**Статус: проверено на Apple Silicon (M3 Max).** Полный конвейер, коррекция терминов и
+привязка спикеров проходят. Разработка по-прежнему идёт под Windows; всё macOS-специфичное
+вынесено так, чтобы Windows-сборку не трогать: отдельный профиль запуска `mac`,
+`HealthTech/run.sh` и условие в `HealthTech.csproj`.
 
 ## 1. Что поставить
 
@@ -31,7 +31,9 @@ export Audio__FfprobePath=/opt/homebrew/bin/ffprobe
 ## 2. Модели
 
 Приложение **никогда не скачивает модели само**. Положите пять файлов в `models/`
-в корне репозитория (каталог в `.gitignore`):
+в корне репозитория (каталог в `.gitignore`). Все, кроме GGUF, скачивает
+`./download-models.sh` из корня репозитория (на Windows — из Git Bash); уже скачанные
+файлы он пропускает. GGUF кладётся руками:
 
 | Файл | Что это | Размер |
 |---|---|---|
@@ -51,15 +53,16 @@ Turbo-версию Whisper не берите: на румынском она з�
 ## 3. Запуск
 
 ```sh
-cd <корень репозитория>
-dotnet build
-dotnet run --project HealthTech --launch-profile http
+HealthTech/run.sh
+# то же самое: dotnet run --project HealthTech --launch-profile mac
 ```
 
-Слушает `http://localhost:5089`, Swagger на `/swagger`.
+Слушает `http://localhost:5089`, Swagger на `/swagger`. Профиль `mac` включает Whisper на
+Metal (`WHISPER_GPU_DEVICE=0`) и выгружает все слои LLM на GPU (`Llm__GpuLayerCount=999`).
+Профиль `http` на Mac тоже работает, но LLM в нём считается на CPU.
 
-`HealthTech/run.bat` — windows-only, на Mac он не нужен: всё, что он делает, это
-выставляет переменную для Vulkan, которого на macOS нет.
+`HealthTech/run.bat` и профили `http`/`https` — для Windows: они выставляют
+`GGML_VK_VISIBLE_DEVICES` под Vulkan, которого на macOS нет.
 
 Проверка, что всё поднялось:
 
@@ -82,40 +85,16 @@ Now listening on: http://localhost:5089
 
 Здесь главное отличие от Windows, и на него стоит потратить пять минут.
 
-**Whisper.** В проекте подключены два рантайма: `Whisper.net.Runtime.Vulkan` и
-`Whisper.net.Runtime` (CPU). Vulkan-пакет содержит нативные библиотеки **только для
-`win-x64` и `linux-x64`** — на macOS он не даст ничего, и Whisper.net откатится на CPU.
-CPU-пакет нативные сборки под `macos-arm64` и `macos-x64` содержит, так что работать
-будет сразу, но на процессоре.
+**Whisper.** Пакет `Whisper.net.Runtime` для `macos-arm64` уже содержит Metal-бэкенд
+(`libggml-metal-whisper.dylib`), отдельный пакет Metal не нужен. `Whisper.net.Runtime.Vulkan`
+подключается только не на macOS (условие `IsOSPlatform('OSX')` в `HealthTech.csproj`):
+на Windows он по-прежнему пробуется первым. В логе при загрузке модели видно
+`ggml_metal_device_init: GPU name: ...`.
 
-На Apple Silicon это медленно. Чтобы получить GPU, добавьте пакет Metal в
-`HealthTech/HealthTech.csproj`:
-
-```xml
-<PackageReference Include="Whisper.net.Runtime.Metal" Version="1.9.1" />
-```
-
-Версия обязана совпадать с `Whisper.net` (1.9.1). После этого в логе строка
-`Whisper runtime:` должна показать Metal. Пакет Vulkan при этом можно оставить — на Mac
-он просто не найдёт себе библиотек.
-
-**LLM.** `LLamaSharp.Backend.Cpu` уже содержит `libggml-metal.dylib` для `osx-arm64`,
-то есть отдельный пакет не нужен — достаточно разрешить выгрузку слоёв на GPU. В
-`SemanticKernel/appsettings.llm.json` сейчас:
-
-```json
-"GpuLayerCount": 0
-```
-
-На Apple Silicon поставьте `-1` (все слои) или, если упрётесь в память, число вроде 20.
-Переопределить можно и переменной окружения, не трогая файл:
-
-```sh
-export Llm__GpuLayerCount=-1
-```
-
-Это самая выгодная правка из всех: коррекция терминов на CPU занимает около пяти минут
-на двухминутную запись, и она же используется генерацией протокола.
+**LLM.** `LLamaSharp.Backend.Cpu` уже содержит `libggml-metal.dylib` для `osx-arm64`.
+В `SemanticKernel/appsettings.llm.json` стоит `"GpuLayerCount": 0` — это значение для
+Windows-машины, его не трогаем. Профиль `mac` переопределяет его переменной
+`Llm__GpuLayerCount=999` (все слои на GPU).
 
 **Диаризация.** sherpa-onnx тянет нативные пакеты под `osx-arm64` и `osx-x64`
 автоматически, делать ничего не нужно.
@@ -131,8 +110,8 @@ export Audio__FfmpegPath=/opt/homebrew/bin/ffmpeg
 export Uploads__MaxBytes=2147483648   # поднять лимит загрузки до 2 ГБ
 ```
 
-`GGML_VK_VISIBLE_DEVICES` в `launchSettings.json` — наследие Windows. На Mac она ничего
-не делает и удалять её необязательно.
+`GGML_VK_VISIBLE_DEVICES` в профилях `http`/`https` нужна Windows-машине. Профиль `mac`
+её не выставляет.
 
 ## 6. Где хранятся данные
 
@@ -162,9 +141,14 @@ logs/healthtech-*.log       Serilog, хранится 14 файлов
 | коррекция терминов | ~5 мин |
 | генерация протокола | 6–10 мин |
 
-На Mac без Metal распознавание будет заметно дольше; с Metal и `GpuLayerCount=-1` —
-скорее всего быстрее, чем на нашей Windows-машине. **Проверьте на реальной записи и
-впишите сюда настоящие числа** — эта таблица пока про Windows.
+На той же записи, Apple M3 Max, профиль `mac` (Whisper и LLM на Metal):
+
+| шаг | время |
+|---|---|
+| нормализация и подготовка | секунды |
+| распознавание | ~16 с |
+| диаризация | ~14 с |
+| коррекция терминов | ~16 с |
 
 ## 8. Известные грабли
 

@@ -16,7 +16,8 @@ Run from the repo root (or `HealthTech/`):
 
 ```sh
 dotnet build                                   # build
-dotnet run --project HealthTech --launch-profile http   # serves http://localhost:5089
+dotnet run --project HealthTech --launch-profile http   # Windows: serves http://localhost:5089
+HealthTech/run.sh                                       # macOS: same, profile "mac" (Metal)
 ```
 
 - There is no test project and no linter configured. Verify changes by running the app and calling endpoints; sample requests are in `HealthTech/HealthTech.http`.
@@ -31,11 +32,11 @@ dotnet run --project HealthTech --launch-profile http   # serves http://localhos
 
 ## External dependency: FFmpeg
 
-The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`). Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
+The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the Windows dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`), on macOS via `brew install ffmpeg`. macOS setup is in `docs/running-on-macos.md`. Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
 
 ## External dependency: models
 
-Transcription models are **not downloaded by the app** — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
+Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
 
 ## Storage
 
@@ -87,14 +88,22 @@ missing.
   the speaker count itself. Values outside 1..20 are a 400.
 - Upload limits are raised to `Uploads:MaxBytes` (1 GB) on both Kestrel and the multipart form; the
   Kestrel default of 30 MB is smaller than a real recording.
-- `TranscriptionWorkflow` runs eight steps, each a `JobStep`: normalize (5%) → prepare 16 kHz mono (10%)
-  → VAD (15%) → transcribe (55%) → diarize (75%) → align (78%) → correct terms (98%) → save (100%).
-  The number in brackets is the accumulated percent written to `Jobs.Percent`.
+- `TranscriptionWorkflow` (version 3) runs nine steps, each a `JobStep`: normalize (5%) → prepare 16 kHz
+  mono (10%) → VAD (15%) → transcribe (55%) → diarize (75%) → align (78%) → correct terms (90%) → save
+  (92%) → generate minutes (100%). The number in brackets is the accumulated percent written to
+  `Jobs.Percent`. The version is bumped whenever the step chain changes, because old instances stay in
+  `workflow.db`.
 - Data crossing a step boundary is serialized into `workflow.db`, so `TranscriptionJobData` holds only
   paths, ids and the chunk list. The turns produced by alignment travel through `turns.json` in the job's
-  transcripts folder instead, and the last step deletes it.
-- The two slow steps report progress inside their own band, so the bar keeps moving:
-  `"Распознавание: чанк 3 из 7"` (15–55%) and `"Коррекция терминов: батч 2 из 5"` (78–98%).
+  transcripts folder instead, and the save step deletes it.
+- The three slow steps report progress inside their own band, so the bar keeps moving:
+  `"Распознавание: чанк 3 из 7"` (15–55%), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
+  `"Генерация протокола: ..."` by phase — extracting facts (92%), writing the document (94%), checking it
+  against the transcript (98%).
+- `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
+  `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes.
+  A minutes failure is logged as a warning and the job still completes: the transcript is the result,
+  the minutes are derived from it and can be regenerated with `POST /document/save/{jobId}`.
 - A failing step puts the job in `Failed` with the message and lets the chain run out; later steps see
   `Failed` and do nothing. There is no automatic retry — the steps are far too expensive for one.
 - `JobStep` checks `Failed` **before** its first progress report, and `UpdateProgressAsync` only raises
@@ -137,6 +146,15 @@ missing.
 - `IProcessedAudioFiles` writes result JSON and Markdown into a directory given by the caller. It no longer
   searches for a file — `FindFirst()` is gone along with the whole "first file wins" model.
 - `IProcessedAudioTranscriptionService` takes an explicit WAV path, reads it via `IAudioSampleReader` (NAudio: WAV only, downmix + resample to 16 kHz mono float in memory when needed), splits it into speech chunks with Silero VAD (`IVoiceActivityService`), runs Whisper on each chunk separately (timestamps shifted back to file time), saves `<transcripts>/<name>.json`. **No diarization** in this flow. Chunking is what stops Whisper repetition loops ("Субтитры делал…", one phrase repeated for a minute) from spreading; Chunking (`Vad:*`): speech regions are grouped at pauses into ~15–25 s chunks (`TargetChunkMin`/`TargetChunkMax`; a chunk under 15 s may grow to `MaxChunkDuration` = 30 s), each padded by `ChunkOverlap`/2 = 0.25 s per side. sherpa's `MaxSpeechDuration` is not a hard cap, so `SileroVoiceActivityService` cuts pause-less speech itself at the quietest 100 ms frame 15–25 s into the piece. Audio is Romanian with Russian words mixed in: `Whisper:Language` = `ro` + full `ggml-large-v3` gave by far the best result; `auto` misdetects per chunk (and then *translates* Romanian into Russian) and turbo loops more.
+- Whisper is built with `WithProbabilities()`. Words are assembled from tokens (a token starting with a
+  space opens a word; whisper.cpp special tokens `[_...]` are skipped), a word's probability is the minimum
+  over its tokens, and a word below `Whisper:LowConfidenceThreshold` (0.5) goes into the segment's
+  `lowConfidence` list as `{ at, word, p }`, `at` being the character offset in the segment text. A word
+  not found in the (trimmed, normalized) segment text is silently skipped. The offset is recomputed on
+  both merges — segments into a turn (`SpeakerAlignmentService`) and a turn into correction pieces
+  (`MedicalTermCorrector`). When the correction changes a turn, `Reassemble` moves the words of unchanged
+  pieces to the pieces' new positions and drops only the words of rewritten pieces, so one fix in a long
+  turn does not wipe its flags. The `.speakers.json` and `.corrected.json` carry that recomputed list.
 - `IProcessedAudioDiarizationService` runs diarization only (no Whisper) on the given file and saves `<transcripts>/<name>.diarization.json` (segments with seconds + `mm:ss`).
 - `ISpeakerAlignmentService.Align` assigns each Whisper segment to the speaker whose turns overlap it most
   (nearest turn if none overlap) and merges consecutive same-speaker segments into turns. Alignment is per
@@ -157,26 +175,52 @@ missing.
 - `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
 - `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
 - Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the batch text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` per file. The Moldova list is labelled as "NOT errors, keep as written".
+- Each piece in the request carries `lowConfidence` (omitted when empty, to save tokens); the system prompt
+  tells the model to start with those words but treat them as a hint, not a restriction. `POST /audio/correctTranscript`
+  reads the same field from the file, so a re-run sees what the pipeline saw; files without it still work.
+- `Glossary/phonetic_confusions.txt` (`heard | correct | comment`) is the third glossary of `medical` only.
+  It is loaded and selected exactly like the others; `ProfileCatalog.HeadingFor` gives it its own heading
+  ("Known ASR mishearings ..."). It is filled by hand from `.medical_corrections.md` reports.
 - `CorrectionValidator` rejects changed numbers, translation (Cyrillic ratio change > 0.15, letters moving between Cyrillic and Latin ≥ 2 each way, or a changed Latin/Cyrillic word-run order), >30% length change and >25% edit distance.
+
+**Speakers and persons** (`HealthTech/Speakers/`):
+- `Persons` is filled by hand (seed in `schema.sql` or the `.db` file); `GET /persons` lists it for the UI.
+- `PUT /jobs/{id}/speakers` takes `[{ label, personId }]` and **replaces** the job's whole binding set in one
+  transaction. Every label must be a speaker of that job's `.speakers.json`, no label twice, every
+  `personId` must exist — otherwise 400 and nothing is saved. `[]` clears the bindings. No result yet → 404.
+- `GET /jobs/{id}/transcript` returns the turns with `displayName` (the doctor's name, or the label if
+  unbound) and the dialogue text rebuilt with those names. Names are substituted on the fly; transcript
+  files are never rewritten, so bindings can change any number of times without reprocessing.
+- All checks live in `SpeakerBindingService`; the repositories are Dapper over `IDbConnectionFactory`.
+
+**Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
+from the speakers transcript, writes the minutes, and a verification pass checks them against the
+transcript. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
+PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
+Linux (`Documents:FontDirectory` overrides). Details and the editor contract are in `HealthTech/Documents/README.md`.
 
 **Controllers** (`HealthTech/Controllers/`, attribute-routed `[Route("[controller]")]`) — thin, delegate to services:
 - `FilesController` — `POST /files` (multipart: `file`) → `{ fileId, fileName, sizeBytes, format, durationSec }`.
 - `JobsController` — `POST /jobs` (JSON: `fileId`, `title`, `speakersCount`, `discussionType`) → the record
   card; `GET /jobs` (hides `Uploaded`); `GET /jobs/{id}` (card + status, currentStep, percent, error);
-  `GET /jobs/{id}/result` (the `.speakers.json` content).
+  `GET /jobs/{id}/result` (the `.speakers.json` content); `PUT /jobs/{id}/speakers` and
+  `GET /jobs/{id}/transcript` → `ISpeakerBindingService`.
+- `PersonsController` — `GET /persons`, the doctor directory for the binding dropdown.
 - `ProfilesController` — `GET /profiles` for the upload dropdown.
 - `AudioController` — `POST /audio/correctTranscript?jobId=&fileName=&profile=` → `ITranscriptCorrectionService`.
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
   `transcribeWithSpeakers`) are gone: with per-job folders "the first file in a shared directory" is meaningless.
+- `DocumentController` — `GET /document/get/{jobId}`, `POST /document/save/{jobId}` (no body: regenerate;
+  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`.
 - `MainController` (`GET /main/run`) is a template placeholder.
 
 `JobStatus` is serialized as a string (`"Running"`), not as an enum number.
 
 ## Not built yet
 
-Planned in `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`, stages 5–7: per-word ASR
-confidence (`lowConfidence`) passed to the LLM, a phonetic-confusions list, and the doctor directory endpoint
-with manual speaker binding (`Persons`/`SpeakerBindings` tables already exist). Glossary content for the
-administrative and financial types is deliberately empty — the mechanism is there, the words are not.
+Deferred items are listed in section 15 of `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`.
+Glossary content for the administrative and financial types is deliberately empty — the mechanism is
+there, the words are not. The phonetic-confusions list holds only a handful of seed lines. There is no
+automatic speaker identification by voice and no create endpoint for `Persons`.
 
 No authentication: `UseAuthorization()` is called without any scheme, every endpoint is open.

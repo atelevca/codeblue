@@ -64,13 +64,12 @@ namespace HealthTech.Workflow.Steps
             var directory = _paths.TranscriptsDirectory(JobId);
             await _files.SaveTextAsync(log.ToMarkdown(), directory, TranscriptPath, ".medical_corrections.md");
 
-            // У реплики, текст которой изменился, смещения указывают в старый текст и починить
-            // их нечем: модель переписала кусок целиком. Список сбрасывается - пустой честнее
-            // указывающего не туда. У нетронутых реплик он остаётся.
+            // У изменённой реплики корректор уже пересчитал смещения: слова нетронутых кусков
+            // сдвинуты, слова переписанных кусков отброшены.
             var updated = turns
                 .Select((t, i) => t.Text == corrected[i].Text
                     ? t
-                    : t with { Text = corrected[i].Text, LowConfidence = [] })
+                    : t with { Text = corrected[i].Text, LowConfidence = corrected[i].LowConfidence })
                 .ToList();
             await WriteJsonAsync(turnsPath, updated);
         }

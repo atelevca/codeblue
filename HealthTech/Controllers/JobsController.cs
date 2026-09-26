@@ -1,4 +1,5 @@
 using HealthTech.Jobs;
+using HealthTech.Speakers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HealthTech.Controllers
@@ -34,5 +35,20 @@ namespace HealthTech.Controllers
             var result = await jobService.GetResultAsync(id, cancellationToken);
             return result is null ? NotFound() : Content(result, "application/json");
         }
+
+        [HttpPut("{id:guid}/speakers")]
+        public Task<NamedTranscript> Bind(
+            Guid id,
+            [FromBody] IReadOnlyList<SpeakerBinding> bindings,
+            [FromServices] ISpeakerBindingService speakers,
+            CancellationToken cancellationToken) =>
+            speakers.BindAsync(id, bindings, cancellationToken);
+
+        [HttpGet("{id:guid}/transcript")]
+        public Task<NamedTranscript> Transcript(
+            Guid id,
+            [FromServices] ISpeakerBindingService speakers,
+            CancellationToken cancellationToken) =>
+            speakers.GetTranscriptAsync(id, cancellationToken);
     }
 }
