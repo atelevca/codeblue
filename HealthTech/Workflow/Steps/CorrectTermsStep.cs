@@ -43,7 +43,10 @@ namespace HealthTech.Workflow.Steps
             // Индекс реплики + 1 = идентификатор сегмента: по нему правка находит себя обратно.
             var segments = turns
                 .Select((t, i) => new Segment(i + 1, t.Speaker,
-                    TimeSpan.FromSeconds(t.Start), TimeSpan.FromSeconds(t.End), t.Text))
+                    TimeSpan.FromSeconds(t.Start), TimeSpan.FromSeconds(t.End), t.Text)
+                {
+                    LowConfidence = t.LowConfidence
+                })
                 .ToList();
 
             var profile = _profiles.Get(ProfileKey);
@@ -61,7 +64,14 @@ namespace HealthTech.Workflow.Steps
             var directory = _paths.TranscriptsDirectory(JobId);
             await _files.SaveTextAsync(log.ToMarkdown(), directory, TranscriptPath, ".medical_corrections.md");
 
-            var updated = turns.Select((t, i) => t with { Text = corrected[i].Text }).ToList();
+            // У реплики, текст которой изменился, смещения указывают в старый текст и починить
+            // их нечем: модель переписала кусок целиком. Список сбрасывается - пустой честнее
+            // указывающего не туда. У нетронутых реплик он остаётся.
+            var updated = turns
+                .Select((t, i) => t.Text == corrected[i].Text
+                    ? t
+                    : t with { Text = corrected[i].Text, LowConfidence = [] })
+                .ToList();
             await WriteJsonAsync(turnsPath, updated);
         }
     }

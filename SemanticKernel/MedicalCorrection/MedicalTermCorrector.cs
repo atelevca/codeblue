@@ -38,7 +38,10 @@ namespace SemanticKernel.MedicalCorrection
         }
 
         /// <summary>A sentence piece of a segment's text. <see cref="Text"/> is trimmed; the whitespace is kept aside.</summary>
-        private record Piece(int Id, int SegmentIndex, Segment Segment, string Leading, string Text, string Trailing);
+        private record Piece(int Id, int SegmentIndex, Segment Segment, string Leading, string Text, string Trailing)
+        {
+            public IReadOnlyList<LowConfidenceWord> LowConfidence { get; init; } = [];
+        }
 
         public async Task<IReadOnlyList<Segment>> CorrectAsync(
             IReadOnlyList<Segment> segments, RecordProfileContent profile, CorrectionLog log,
@@ -94,15 +97,29 @@ namespace SemanticKernel.MedicalCorrection
             for (var index = 0; index < segments.Count; index++)
             {
                 var segment = segments[index];
+
+                // Куски покрывают текст ровно, поэтому абсолютное начало куска - это сумма
+                // длин предыдущих. Слово переносится в тот кусок, внутрь которого попало целиком.
+                var partStart = 0;
                 foreach (var part in TextPieces.Split(segment.Text, Math.Max(1, _options.MaxPieceCharacters)))
                 {
                     var text = part.Trim();
                     if (text.Length == 0)
                     {
+                        partStart += part.Length;
                         continue;
                     }
                     var leading = part[..part.IndexOf(text, StringComparison.Ordinal)];
-                    pieces.Add(new Piece(pieces.Count + 1, index, segment, leading, text, part[(leading.Length + text.Length)..]));
+                    var textStart = partStart + leading.Length;
+
+                    var words = segment.LowConfidence
+                        .Where(w => w.At >= textStart && w.At + w.Word.Length <= textStart + text.Length)
+                        .Select(w => w with { At = w.At - textStart })
+                        .ToList();
+
+                    pieces.Add(new Piece(pieces.Count + 1, index, segment, leading, text,
+                        part[(leading.Length + text.Length)..]) { LowConfidence = words });
+                    partStart += part.Length;
                 }
             }
             return pieces;
@@ -204,7 +221,11 @@ namespace SemanticKernel.MedicalCorrection
             var request = new
             {
                 context = context.Select(p => new { id = p.Id, text = Tail(p.Text, MaxContextPieceLength) }),
-                segments = batch.Select(p => new { id = p.Id, text = p.Text })
+                // lowConfidence опускается у кусков без подозрительных слов: пустой массив в
+                // каждом элементе - это лишние токены в каждом запросе и ничего больше.
+                segments = batch.Select(p => p.LowConfidence.Count == 0
+                    ? (object)new { id = p.Id, text = p.Text }
+                    : new { id = p.Id, text = p.Text, lowConfidence = p.LowConfidence })
             };
 
             // "\n" rather than AppendLine: the prompt shouldn't depend on the OS line ending.
