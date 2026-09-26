@@ -136,6 +136,19 @@ export interface SavedDocument {
   delta: QuillDelta;
 }
 
+/** `POST /document/sendemail/{jobId}` — sent through the local SMTP server (Mailpit). */
+export interface SendEmailRequest {
+  to: string[];
+  subject: string;
+  body: string;
+}
+
+export interface SentEmail {
+  to: string[];
+  subject: string;
+  attachmentFileName: string;
+}
+
 /** `POST /audio/correctTranscript` (service endpoint, not used by the regular flow). */
 export interface TranscriptCorrectionResult {
   sourceFile: string;

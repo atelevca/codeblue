@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Job } from '../../api/models';
+import { CodeBlueApi, toApiError } from '../../api/codeblue-api';
 import { emailOf, speakerColor } from '../../shared/catalog';
 import { initials } from '../../shared/format';
 import { jobTitle } from '../../state/processing-tracker';
@@ -18,12 +19,12 @@ import { Toasts } from '../../state/toasts';
 
 const isEmail = (x: string) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(x);
 
-/** mail clients choke on very long `mailto:` URLs, so the inline minutes are cut. */
-const MAX_INLINE_CHARS = 1500;
+/** Demo recipient: Mailpit catches every address, nothing is delivered outside this machine. */
+const DEFAULT_RECIPIENT = 'doctor@demo.test';
 
 /**
- * The backend has no e-mail endpoint, so the dialog opens the user's mail client (`mailto:`)
- * with recipients, subject and the minutes as text. The PDF has to be attached by hand.
+ * Sends the minutes through the backend's local SMTP server (Mailpit, http://localhost:8025):
+ * the PDF is attached on the server, the minutes text optionally goes into the body.
  */
 @Component({
   selector: 'app-email-dialog',
@@ -31,6 +32,7 @@ const MAX_INLINE_CHARS = 1500;
   styleUrl: './email-dialog.scss',
 })
 export class EmailDialog implements OnInit {
+  private readonly api = inject(CodeBlueApi);
   private readonly toasts = inject(Toasts);
   private readonly speakerMap = inject(SpeakerMap);
   private readonly toInputEl = viewChild<ElementRef<HTMLInputElement>>('toInput');
@@ -66,6 +68,7 @@ export class EmailDialog implements OnInit {
   protected readonly subject = signal('');
   protected readonly message = signal('');
   protected readonly inline = signal(true);
+  protected readonly sending = signal(false);
 
   private readonly title = computed(() => jobTitle(this.record()));
   protected readonly others = computed(() => {
@@ -80,7 +83,8 @@ export class EmailDialog implements OnInit {
   );
 
   ngOnInit(): void {
-    this.to.set(this.people().map((p) => p.email));
+    const mapped = this.people().map((p) => p.email);
+    this.to.set(mapped.includes(DEFAULT_RECIPIENT) ? mapped : [DEFAULT_RECIPIENT, ...mapped]);
     this.subject.set('Proces-verbal: ' + this.title());
   }
 
@@ -146,24 +150,32 @@ export class EmailDialog implements OnInit {
   }
 
   protected send(): void {
+    if (this.sending()) return;
     this.commit();
     if (!this.to().length) {
       this.toError.update((e) => e ?? 'Adăugați cel puțin un destinatar.');
       return;
     }
-    const text = this.docText();
-    const inline =
-      text.length > MAX_INLINE_CHARS ? text.slice(0, MAX_INLINE_CHARS) + '\n[…]' : text;
-    const body = [this.message().trim(), this.inline() ? inline : ''].filter(Boolean).join('\n\n');
+    const body = [this.message().trim(), this.inline() ? this.docText() : '']
+      .filter(Boolean)
+      .join('\n\n');
     const subject = this.subject().trim() || 'Proces-verbal: ' + this.title();
     const to = this.to();
-    const query = [`subject=${encodeURIComponent(subject)}`];
-    if (body) query.push(`body=${encodeURIComponent(body)}`);
-    window.location.href = `mailto:${to.join(',')}?${query.join('&')}`;
-    this.toasts.success(
-      'Deschis în clientul de e-mail',
-      to.length === 1 ? 'Către ' + to[0] : `Către ${to.length} destinatari`,
-    );
-    this.closed.emit();
+    this.sending.set(true);
+    this.api.sendEmail(this.record().id, { to, subject, body }).subscribe({
+      next: () => {
+        this.sending.set(false);
+        this.toasts.success(
+          'Scrisoarea a fost acceptată de serverul local de e-mail',
+          to.length === 1 ? 'Către ' + to[0] : `Către ${to.length} destinatari`,
+        );
+        this.closed.emit();
+      },
+      error: (err) => {
+        // The dialog stays open with everything typed, so the user can retry.
+        this.sending.set(false);
+        this.toasts.error('Trimiterea a eșuat', toApiError(err).message);
+      },
+    });
   }
 }

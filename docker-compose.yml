@@ -1,0 +1,19 @@
+# Local mail catcher for "Trimite pe e-mail". Nothing leaves this machine: Mailpit accepts every
+# message and shows it at http://localhost:8025. Ports are bound to loopback only.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP (HealthTech Email:Port)
+      - "127.0.0.1:8025:8025"   # web UI
+    environment:
+      MP_DATABASE: /data/mailpit.db   # messages survive a restart
+      MP_MAX_MESSAGES: 500
+      MP_DISABLE_VERSION_CHECK: "true"   # no update check against GitHub
+    volumes:
+      - mailpit-data:/data
+
+volumes:
+  mailpit-data:

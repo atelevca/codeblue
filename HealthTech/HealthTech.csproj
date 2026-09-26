@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.89" />
+    <PackageReference Include="MailKit" Version="4.18.0" />
     <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.4" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />

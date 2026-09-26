@@ -186,6 +186,15 @@ function route(req: HttpRequest<unknown>): Observable<HttpEvent<unknown>> {
       return ok(
         m.doc ?? fail(404, 'Document error', 'Documentul nu a fost salvat pentru acest job.'),
       );
+    case 'POST /document/sendemail': {
+      if (!m.doc) fail(404, 'Document error', 'Documentul nu a fost salvat pentru acest job.');
+      const body = req.body as { to: string[]; subject: string };
+      return ok({
+        to: body.to,
+        subject: body.subject,
+        attachmentFileName: `proces-verbal-${id}.pdf`,
+      });
+    }
     case 'GET /document/downloadpdf': {
       if (!m.doc) fail(404, 'Document error', 'Documentul nu a fost salvat pentru acest job.');
       const headers = new HttpHeaders({
