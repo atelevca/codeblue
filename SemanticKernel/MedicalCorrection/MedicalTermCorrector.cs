@@ -183,7 +183,7 @@ namespace SemanticKernel.MedicalCorrection
                 string? response;
                 try
                 {
-                    var reply = await chat.GetChatMessageContentAsync(history, settings, cancellationToken: ct);
+                    var reply = await ChatCompletionRunner.CompleteAsync(chat, history, settings, ct);
                     response = reply.Content;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)

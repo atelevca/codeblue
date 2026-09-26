@@ -43,3 +43,31 @@ Accept: application/json
 # Файл ищется в transcripts/<jobId>/; имя — без каталогов, ".json" можно опустить.
 POST {{HealthTech_HostAddress}}/audio/correctTranscript?jobId={{FileId}}&fileName=Medpark_audio_2min.speakers.json&profile=medical
 Accept: application/json
+
+### Generate, verify against the completed transcript, and save the Romanian MOM (no body)
+POST {{HealthTech_HostAddress}}/document/save/{{FileId}}
+Accept: application/json
+
+### Read saved MOM and verification report
+GET {{HealthTech_HostAddress}}/document/get/{{FileId}}
+Accept: application/json
+
+### Verify and save a full Quill getContents() snapshot (not the incremental text-change Delta)
+POST {{HealthTech_HostAddress}}/document/save/{{FileId}}
+Content-Type: application/json
+
+{
+  "delta": {
+    "ops": [
+      { "insert": "Proces-verbal" },
+      { "insert": "\n", "attributes": { "header": 1 } },
+      { "insert": "Rezumat" },
+      { "insert": "\n", "attributes": { "header": 2 } },
+      { "insert": "Discuție de lucru.\nResponsabil: Nespecificat\nTermen: Nespecificat\n" }
+    ]
+  }
+}
+
+### Download the saved MOM as PDF
+GET {{HealthTech_HostAddress}}/document/downloadpdf/{{FileId}}
+Accept: application/pdf
