@@ -7,17 +7,8 @@ namespace HealthTech.Controllers
     [Route("[controller]")]
     public class JobsController : ControllerBase
     {
-        [HttpPost]
-        public async Task<JobCreated> Create(
-            IFormFile file,
-            [FromForm] string profile,
-            [FromServices] IJobService jobService,
-            CancellationToken cancellationToken)
-        {
-            await using var stream = file.OpenReadStream();
-            var jobId = await jobService.CreateAsync(stream, file.FileName, profile, cancellationToken);
-            return new JobCreated(jobId);
-        }
+        // POST /jobs временно отсутствует: старая однофазная загрузка убрана вместе с
+        // CreateAsync, оформление записи добавляется следующей задачей плана.
 
         [HttpGet]
         public Task<IReadOnlyList<Job>> List(
