@@ -120,10 +120,21 @@ export interface MinutesVerification {
   findings: VerificationFinding[];
   completed: boolean;
   /**
+   * The pipeline saves the minutes as soon as they are rendered and verifies them in the background
+   * after the job is Completed; true until that pass has written its result (`completed` is false
+   * meanwhile). Poll `GET /document/get/{jobId}` until it turns false. Absent in older documents.
+   */
+  pending?: boolean;
+  /**
    * Findings the model reported but could not prove (quote not found in the transcript or the
    * document); they are not returned. Above zero, `isConsistent` is false even with empty `findings`.
    */
   discardedFindings: number;
+  /**
+   * Long transcript checked fragment by fragment: claims without support anywhere in the transcript
+   * were not checked, so `isConsistent` is false even with no findings. Absent in older documents.
+   */
+  partial?: boolean;
   isConsistent: boolean;
 }
 
@@ -134,6 +145,19 @@ export interface SavedDocument {
   verification: MinutesVerification;
   savedAt: ISODate;
   delta: QuillDelta;
+}
+
+/** `POST /document/sendemail/{jobId}` — sent through the local SMTP server (Mailpit). */
+export interface SendEmailRequest {
+  to: string[];
+  subject: string;
+  body: string;
+}
+
+export interface SentEmail {
+  to: string[];
+  subject: string;
+  attachmentFileName: string;
 }
 
 /** `POST /audio/correctTranscript` (service endpoint, not used by the regular flow). */

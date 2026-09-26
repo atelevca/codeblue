@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using LLama;
 using LLama.Common;
 using LLama.Native;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using SemanticKernel.Minutes;
 
 namespace SemanticKernel
 {
@@ -23,33 +25,71 @@ namespace SemanticKernel
     /// Owns one local GGUF model (LLamaSharp, in-process, offline) and a Semantic Kernel <see cref="Kernel"/>
     /// with <see cref="LLamaSharpChatCompletion"/> registered as <see cref="IChatCompletionService"/>.
     /// One instance per <see cref="LlmModelRole"/>: the correction model and the minutes model may differ
-    /// (a 3B for the many short correction requests, the 7B for the two long minutes requests); when they are
-    /// the same file, DI hands both roles the same instance.
+    /// (a 3B for the many short correction requests, the 7B for the long minutes requests); when they are
+    /// the same file, DI hands both roles the same instance, which then serves both roles.
     /// The model path is checked in the constructor (fails fast with the expected path); the weights are loaded
     /// once, on first use, so endpoints that never touch the LLM don't pay for the multi-GB load.
+    /// It is also the <see cref="ITokenCounter"/> of its model: the tokenizer of the loaded GGUF sizes every
+    /// request against this model's context.
     /// </summary>
-    public sealed class KernelFactory : IChatCompletionProvider, IDisposable
+    public sealed class KernelFactory : IChatCompletionProvider, ITokenCounter, IDisposable
     {
         private readonly LlmOptions _options;
+        private readonly MinutesOptions _minutes;
         private readonly LlmModelSettings _model;
         private readonly ILogger<KernelFactory> _logger;
         private readonly SemaphoreSlim _loadLock = new(1, 1);
         private LLamaWeights? _weights;
         private Kernel? _kernel;
+        // A context too small for the prompts cannot fix itself without a restart; without this every
+        // later call would reload the multi-GB weights only to fail the same way.
+        private LlmConfigurationException? _configurationError;
         private bool _disposed;
 
-        public KernelFactory(LlmModelRole role, IOptions<LlmOptions> options, ILogger<KernelFactory> logger)
+        /// <param name="roles">The stages this model serves; both when the two roles share one file.</param>
+        public KernelFactory(IReadOnlyCollection<LlmModelRole> roles, IOptions<LlmOptions> options,
+            IOptions<MinutesOptions> minutes, ILogger<KernelFactory> logger)
         {
-            Role = role;
+            ArgumentOutOfRangeException.ThrowIfZero(roles.Count);
+            Roles = roles;
             _options = options.Value;
-            _model = _options.ModelFor(role);
+            _minutes = minutes.Value;
+            _model = _options.ModelFor(roles.First());
             _logger = logger;
             ModelPath = _options.ResolveModelPath(AppContext.BaseDirectory, _model.ModelFile);
         }
 
-        public LlmModelRole Role { get; }
+        public IReadOnlyCollection<LlmModelRole> Roles { get; }
+
+        private string RoleName => string.Join("+", Roles);
 
         public string ModelPath { get; }
+
+        public uint ContextSize => _model.ContextSize;
+
+        public async Task<int> CountAsync(string text, CancellationToken ct = default) =>
+            Count(await GetWeightsAsync(ct), text, addBos: false);
+
+        public async Task<int> CountPromptAsync(string systemPrompt, string userMessage, CancellationToken ct = default) =>
+            CountPrompt(await GetWeightsAsync(ct), systemPrompt, userMessage);
+
+        private async Task<LLamaWeights> GetWeightsAsync(CancellationToken ct)
+        {
+            await GetKernelAsync(ct);
+            return _weights!;
+        }
+
+        private static int Count(LLamaWeights weights, string text, bool addBos) =>
+            weights.Tokenize(text, addBos, true, Encoding.UTF8).Length;
+
+        // Renders exactly what the executor receives: PromptTemplateTransformer with the model's chat template.
+        private static int CountPrompt(LLamaWeights weights, string systemPrompt, string userMessage)
+        {
+            var history = new LLama.Common.ChatHistory();
+            history.AddMessage(LLama.Common.AuthorRole.System, systemPrompt);
+            history.AddMessage(LLama.Common.AuthorRole.User, userMessage);
+            return Count(weights, new PromptTemplateTransformer(weights, withAssistant: true).HistoryToText(history), addBos: true);
+        }
 
         public async Task<Kernel> GetKernelAsync(CancellationToken cancellationToken = default)
         {
@@ -62,7 +102,19 @@ namespace SemanticKernel
             try
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                return _kernel ??= await LoadAsync(cancellationToken);
+                if (_configurationError != null)
+                {
+                    throw new LlmConfigurationException(_configurationError.Message);
+                }
+                try
+                {
+                    return _kernel ??= await LoadAsync(cancellationToken);
+                }
+                catch (LlmConfigurationException ex)
+                {
+                    _configurationError = ex;
+                    throw;
+                }
             }
             finally
             {
@@ -92,11 +144,13 @@ namespace SemanticKernel
             };
 
             _logger.LogInformation("Loading {Role} LLM {ModelPath} (context {ContextSize}, GPU layers {GpuLayerCount})",
-                Role, ModelPath, _model.ContextSize, _model.GpuLayerCount);
+                RoleName, ModelPath, _model.ContextSize, _model.GpuLayerCount);
             var stopwatch = Stopwatch.StartNew();
             var weights = await LLamaWeights.LoadFromFileAsync(parameters, cancellationToken, null);
             try
             {
+                ValidateContext(weights);
+
                 // StatelessExecutor creates a fresh context per request: no chat state leaks between batches.
                 // ApplyTemplate stays off because PromptTemplateTransformer below already renders the prompt
                 // with the model's own chat template (ChatML for Qwen); the connector's default transform
@@ -120,13 +174,45 @@ namespace SemanticKernel
 
                 _weights = weights;
                 _logger.LogInformation("{Role} LLM loaded in {Seconds:F1} s ({Parameters:N0} parameters)",
-                    Role, stopwatch.Elapsed.TotalSeconds, weights.ParameterCount);
+                    RoleName, stopwatch.Elapsed.TotalSeconds, weights.ParameterCount);
                 return kernel;
             }
             catch
             {
                 weights.Dispose();
                 throw;
+            }
+        }
+
+        // The weights load lazily, so this is the earliest point the tokenizer exists. For every role this model
+        // serves, pairs the largest of that role's prompts with the largest of its replies: if even a minimal
+        // window does not fit, every long job would fail later with NoKvSlot. The correction role reads the
+        // profile prompts (*_correction.system.txt), the minutes role its own (minutes_*.system.txt).
+        private void ValidateContext(LLamaWeights weights)
+        {
+            var promptsDirectory = Path.Combine(AppContext.BaseDirectory, "Prompts");
+            var margin = TokenBudget.Margin(_model.ContextSize);
+            foreach (var role in Roles)
+            {
+                var (pattern, reply, replySettings) = role == LlmModelRole.Minutes
+                    ? ("minutes_*.system.txt", Math.Max(_minutes.ExtractionMaxTokens, _minutes.VerificationMaxTokens),
+                        "Minutes:ExtractionMaxTokens / Minutes:VerificationMaxTokens")
+                    : ("*_correction.system.txt", _options.MaxTokens, "Llm:MaxTokens");
+                var largest = Directory.GetFiles(promptsDirectory, pattern)
+                    .Select(path => (Name: Path.GetFileName(path), Tokens: CountPrompt(weights, File.ReadAllText(path), "")))
+                    .DefaultIfEmpty((Name: "(none)", Tokens: 0))
+                    .MaxBy(prompt => prompt.Tokens);
+                var needed = largest.Tokens + reply + TokenBudget.MinimalWindowTokens + margin;
+                if (needed > _model.ContextSize)
+                {
+                    var contextSetting = role == LlmModelRole.Minutes && Roles.Count == 1 ? "Llm:Minutes:ContextSize" : "Llm:ContextSize";
+                    throw new LlmConfigurationException(
+                        $"{contextSetting} = {_model.ContextSize} is too small for the {role} model: prompt {largest.Name} ({largest.Tokens} tokens) " +
+                        $"+ reply {reply} + window {TokenBudget.MinimalWindowTokens} + margin {margin} need {needed}. " +
+                        $"Raise {contextSetting} or lower {replySettings}.");
+                }
+                _logger.LogInformation("{Role} LLM context check: {ContextSize} tokens, largest prompt {Prompt} {PromptTokens} tokens, largest reply {Reply}",
+                    role, _model.ContextSize, largest.Name, largest.Tokens, reply);
             }
         }
 

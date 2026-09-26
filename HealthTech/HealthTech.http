@@ -72,6 +72,16 @@ Content-Type: application/json
 GET {{HealthTech_HostAddress}}/document/downloadpdf/{{FileId}}
 Accept: application/pdf
 
+### Send the saved MOM as PDF through local Mailpit (docker compose up -d; inbox: http://localhost:8025)
+POST {{HealthTech_HostAddress}}/document/sendemail/{{FileId}}
+Content-Type: application/json
+
+{
+  "to": ["doctor@demo.test"],
+  "subject": "Тест / Proces-verbal",
+  "body": "Локальная отправка работает. Ședință medicală: ă, â, î, ș, ț."
+}
+
 ### Справочник врачей для выпадашки привязки
 GET {{HealthTech_HostAddress}}/persons
 Accept: application/json

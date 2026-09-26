@@ -27,14 +27,15 @@ bool consistent = verification.IsConsistent;
    (`JsonNamingPolicy.SnakeCaseLower`). Normalizarea (`NormalizeFacts`) respinge listele
    lipsă sau intrările goale, pune `Nespecificat` în orice câmp text gol, renumerotează
    agenda 1..n și anulează referințele `agenda_id` care nu indică un punct existent.
-2. **Randarea documentului** (`RenderMinutes`, fără apel la model): procesul-verbal Markdown
-   este construit integral în cod din faptele normalizate - antetul (temă, dată, oră, loc),
+2. **Randarea documentului** (`RenderMinutes` → `MinutesRenderer`, fără apel la model): procesul-verbal
+   Markdown este construit integral în cod din faptele normalizate - antetul (temă, dată, oră, loc),
    Participanți, Ordinea de zi (cu nota despre agenda dedusă), Desfășurarea ședinței (un
    subtitlu „### id. topic” cu textul din `discussion`), tabelele Decizii, Acțiuni și Probleme
-   deschise cu coloana „Punct” (agenda_id sau „–”), Următoarea ședință, Rezumat și Semnături.
-   Vechea etapă „redactează procesul-verbal din aceste fapte” costa ~96 s de 7B pe CPU și nu
-   adăuga nimic ce faptele nu conțineau deja; acum niciun element nu poate fi omis, mutat la
-   alt punct sau completat cu o presupunere.
+   deschise cu coloana „Punct” (agenda_id sau „–”), Următoarea ședință, Rezumat și Semnături, în
+   ordinea și cu textele fixe ale șablonului. Vechea etapă „redactează procesul-verbal din aceste
+   fapte” costa ~96 s de 7B pe CPU și nu adăuga nimic ce faptele nu conțineau deja; acum fiecare
+   valoare este copiată, deci niciun element nu poate fi omis, mutat la alt punct sau completat cu
+   o presupunere, iar lungimea documentului nu este limitată de contextul modelului.
 3. **Minutes Verification**: un nou apel al modelului compară documentul final direct
    cu transcriptul original și metadatele. Raportul în română conține concluzia și
    discrepanțele: afirmații fără suport, omisiuni, contradicții și atribuiri greșite
@@ -60,24 +61,37 @@ Tabelele finale (decizii, acțiuni, probleme deschise) sunt construite direct di
 normalizate, astfel încât etapa a doua să nu poată modifica conținutul sau atribuirile lor.
 
 Configurarea este în secțiunea `Minutes` din `appsettings.llm.json`; configurația
-aplicației și variabilele de mediu o pot suprascrie, de exemplu
-`Minutes__ExtractionMaxTokens`. Limita inițială este 6000 de caractere pentru
-transcript; extragerea are 3072 de tokenuri de răspuns. Textele mai lungi sunt respinse explicit,
-nu trunchiate; împărțirea automată a transcriptelor nu este implementată.
-La creșterea limitelor, ajustați și `Llm:ContextSize` pentru a permite atât promptul,
-cât și răspunsul. Numărul de caractere nu garantează încadrarea în numărul de tokenuri.
-Verificarea are limite separate: `MaxVerificationCharacters` (implicit 14000 pentru
-JSON-ul combinat transcript + document) și `VerificationMaxTokens` (2048).
-Dimensionați contextul modelului și pentru această intrare combinată; nu se trunchiază sursele.
+aplicației și variabilele de mediu o pot suprascrie, de exemplu `Minutes__ExtractionMaxTokens`.
+Fiecare cerere este dimensionată în tokenuri reale, numărate cu tokenizatorul modelului
+(`ITokenCounter`), față de `Llm:ContextSize` minus răspunsul etapei. Nimic nu este trunchiat:
 
-Răspunsurile goale sau cu format invalid ale extragerii sunt reîncercate de `Minutes:MaxRetries`
-ori (implicit o reîncercare); verificarea are propriul `Minutes:VerificationMaxRetries`,
-implicit 0: o verificare care a eșuat o dată eșuează de regulă la fel și a doua oară, iar
-fiecare încercare costă minute. Dacă extragerea eșuează, documentul nu se randează.
+- **Extragerea**: un transcript care nu încape într-o singură fereastră este împărțit în
+  ferestre de replici întregi (`TranscriptWindows`), de cel mult `Minutes:MaxWindowTokens`
+  (implicit 4000) tokenuri; o replică mai lungă decât o fereastră este tăiată la granița
+  propozițiilor, fiecare parte păstrând eticheta vorbitorului. Faptele sunt extrase pe fiecare
+  fereastră (cu temele deja găsite, ca titlurile să coincidă), unite în cod
+  (`MeetingFactsMerger`), apoi un apel mic de consolidare primește doar titlurile temelor și
+  rezumatele fragmentelor, grupează temele identice și scrie rezumatul general. Dacă
+  consolidarea eșuează, documentul se construiește din faptele unite.
+- **Verificarea**: dacă transcriptul și documentul nu încap împreună, întregul document este
+  verificat pe rând față de fiecare fragment al transcriptului. `Unsupported` nu poate fi
+  judecat pe un fragment și nu este raportat în acest caz; rezumatul verificării o spune.
+  Un fragment eșuat lasă `Completed = false`. Dacă documentul singur nu lasă loc pentru o
+  fereastră minimă, verificarea nu se face și rezumatul explică motivul.
+- La prima încărcare a modelului, `KernelFactory` verifică faptul că contextul modelului
+  (`Llm:ContextSize`, respectiv `Llm:Minutes:ContextSize` pentru modelul procesului-verbal)
+  cuprinde cel mai mare prompt al rolului, cel mai mare răspuns și o fereastră de 1000 de
+  tokenuri; altfel aruncă `LlmConfigurationException` cu setarea de mărit.
+
+Răspunsurile goale sau cu format invalid ale extragerii și consolidării sunt reîncercate de
+`Minutes:MaxRetries` ori (implicit o reîncercare); verificarea are propriul
+`Minutes:VerificationMaxRetries`, implicit 0: o verificare care a eșuat o dată eșuează de regulă
+la fel și a doua oară, iar fiecare încercare costă minute. Dacă extragerea (a oricărui fragment)
+eșuează, documentul nu este construit.
 Anularea și erorile de inferență sunt propagate apelantului. Un raport al verificării
 cu format sau citate invalide produce o eroare după reîncercări, nu un verdict de conformitate.
 Anularea verificării nu returnează un rezultat prezentat drept verificat. Formatul JSON și
-secțiunile Markdown sunt validate; fidelitatea semantică a textului generat
+documentul este construit în cod; fidelitatea semantică a textului generat
 necesită revizuire umană. Conținutul medical nu este scris în loguri de acest serviciu.
 
 Apelurile de inferență ale corectorului și generatorului sunt serializate pentru

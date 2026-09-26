@@ -32,16 +32,16 @@ namespace HealthTech.Workflow.Steps
 
         protected override async Task ExecuteAsync(IStepExecutionContext context)
         {
-            // Долгий шаг: 7B на CPU извлекает факты минутами. Без доклада о фазе полоса
-            // стоит на 92% и выглядит зависшей.
-            var phase = new Progress<DocumentPhase>(p => _ = Progress.ReportAsync(JobId, Caption(p), Percent(p)));
+            // Долгий шаг: 7B извлекает факты минутами, на длинной записи - по фрагментам.
+            // Без докладов полоса стоит на 92% и выглядит зависшей.
+            var progress = new Progress<DocumentProgress>(p => _ = Progress.ReportAsync(JobId, Caption(p), Percent(p)));
 
             // Протокол - производная от транскрипта, а не сам транскрипт. Если модель не
             // справилась, задание всё равно завершается: результат распознавания готов и
             // доступен, а документ можно собрать позже через POST /document/save/{jobId}.
             try
             {
-                var document = await _documents.GenerateAsync(JobId, phase);
+                var document = await _documents.GenerateAsync(JobId, progress);
                 Logger.LogInformation("Задание {JobId}: протокол сохранён (сверка: {Verification})",
                     JobId, DocumentService.Describe(document.Verification));
             }
@@ -51,16 +51,25 @@ namespace HealthTech.Workflow.Steps
             }
         }
 
-        private static string Caption(DocumentPhase phase) => phase switch
+        private static string Caption(DocumentProgress p)
         {
-            DocumentPhase.ExtractingFacts => "Генерация протокола: извлечение фактов",
-            _ => "Генерация протокола: сверка с транскриптом"
-        };
+            var fragment = p.Total > 1 ? $" (фрагмент {p.Current} из {p.Total})" : "";
+            return p.Phase switch
+            {
+                DocumentPhase.ExtractingFacts => "Генерация протокола: извлечение фактов" + fragment,
+                DocumentPhase.Consolidating => "Генерация протокола: объединение фрагментов",
+                _ => "Генерация протокола: сверка с транскриптом" + fragment
+            };
+        }
 
-        private static int Percent(DocumentPhase phase) => phase switch
+        // 92–95 извлечение по фрагментам, 95 объединение фрагментов; документ рендерится в коде
+        // мгновенно и шаг завершается на 100. Сверка (96–99) в конвейере не докладывается: она
+        // идёт в фоне после Completed, но фаза остаётся для полноты сопоставления.
+        private static int Percent(DocumentProgress p) => p.Phase switch
         {
-            DocumentPhase.ExtractingFacts => BandStart,
-            _ => 98
+            DocumentPhase.ExtractingFacts => BandStart + 3 * (p.Current - 1) / p.Total,
+            DocumentPhase.Consolidating => 95,
+            _ => 96 + 3 * (p.Current - 1) / p.Total
         };
     }
 }

@@ -4,7 +4,7 @@ using SemanticKernel;
 
 namespace HealthTech.Transcription
 {
-    // The medical-correction GGUF model is placed manually; report the expected path as 503 instead of a bare 500.
+    // A missing GGUF model or a context too small for the prompts: 503 with the reason, not a bare 500.
     public class LlmModelNotFoundExceptionHandler : IExceptionHandler
     {
         private readonly IProblemDetailsService _problemDetailsService;
@@ -16,7 +16,7 @@ namespace HealthTech.Transcription
 
         public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
         {
-            if (exception is not LlmModelNotFoundException modelException)
+            if (exception is not (LlmModelNotFoundException or LlmConfigurationException))
             {
                 return false;
             }
@@ -29,8 +29,8 @@ namespace HealthTech.Transcription
                 ProblemDetails = new ProblemDetails
                 {
                     Status = httpContext.Response.StatusCode,
-                    Title = "LlmModelNotFound",
-                    Detail = modelException.Message
+                    Title = exception is LlmConfigurationException ? "LlmConfiguration" : "LlmModelNotFound",
+                    Detail = exception.Message
                 }
             });
         }

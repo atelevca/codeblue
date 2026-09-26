@@ -117,10 +117,8 @@ Windows-машины и **не редактируются**. Всё macOS-спе
 | `WHISPER_GPU_DEVICE` | `0` | Metal показывает один GPU; на Windows стоит `1` (Arc) |
 | `Llm__GpuLayerCount` | `999` | все слои 3B (коррекция) на Metal; в json стоит `0` |
 | `Llm__Minutes__GpuLayerCount` | `999` | все слои 7B (протокол) на Metal. В json ключ `Llm:Minutes:GpuLayerCount` не задан, поэтому 7B унаследовал бы верхнее значение и так; строка делает намерение явным и защищает от появления `0` в секции `Minutes` |
-| `Llm__ContextSize` | `32768` | длинные записи целиком в контекст; наследуется и 7B (`Llm:Minutes:ContextSize` не задан) |
+| `Llm__ContextSize` | `32768` | больше окно транскрипта на запрос (меньше фрагментов, сверка чаще целиком); наследуется и 7B (`Llm:Minutes:ContextSize` не задан). Длина записи контекстом больше не ограничена: запросы режутся по токенам (`docs/long-recordings.md`) |
 | `Llm__MaxTokens` | `4096` | длиннее ответ коррекции для больших батчей |
-| `Minutes__MaxTranscriptCharacters` | `55000` | транскрипт часовой записи для извлечения фактов |
-| `Minutes__MaxVerificationCharacters` | `65000` | транскрипт + документ для сверки |
 | `Minutes__ExtractionMaxTokens` | `4096` | JSON фактов длинной записи |
 | `Minutes__VerificationMaxTokens` | `4096` | отчёт сверки длинной записи |
 

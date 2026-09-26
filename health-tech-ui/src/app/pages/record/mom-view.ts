@@ -117,16 +117,22 @@ export class MomView implements OnInit {
   protected readonly verification = computed(() => {
     const v = this.doc()?.verification;
     if (!v) return null;
-    const tone = !v.completed ? 'unknown' : v.isConsistent ? 'ok' : 'warn';
-    const label = !v.completed
+    const partialClean =
+      v.completed && !!v.partial && v.findings.length === 0 && v.discardedFindings === 0;
+    const tone = !v.completed || partialClean ? 'unknown' : v.isConsistent ? 'ok' : 'warn';
+    const label = v.pending
+      ? 'Verificarea automată este în curs — documentul poate fi consultat, dar nu este încă verificat'
+      : !v.completed
       ? 'Verificarea automată nu a fost finalizată — documentul nu este verificat'
       : v.isConsistent
         ? 'Verificat: nicio neconcordanță cu transcrierea'
-        : v.findings.length === 0
-          ? `Verificare neconcludentă: ${v.discardedFindings} constatări fără citat regăsit — necesită revizuire`
-          : v.findings.length === 1
-            ? '1 neconcordanță cu transcrierea'
-            : `${v.findings.length} neconcordanțe cu transcrierea`;
+        : partialClean
+          ? 'Verificat pe fragmente: nicio neconcordanță; afirmațiile fără suport nu au fost verificate'
+          : v.findings.length === 0
+            ? `Verificare neconcludentă: ${v.discardedFindings} constatări fără citat regăsit — necesită revizuire`
+            : v.findings.length === 1
+              ? '1 neconcordanță cu transcrierea'
+              : `${v.findings.length} neconcordanțe cu transcrierea`;
     return {
       tone,
       label,

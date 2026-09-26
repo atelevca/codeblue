@@ -22,14 +22,21 @@ public sealed record MinutesVerification
     public bool Pending { get; init; }
 
     /// <summary>
+    /// Checked fragment by fragment (a long transcript): contradictions, misattributions and omissions
+    /// were checked, claims with no support anywhere in the transcript (Unsupported) were not. Such a
+    /// document is never reported as consistent, even without findings.
+    /// </summary>
+    public bool Partial { get; init; }
+
+    /// <summary>
     /// Находки, отброшенные при проверке: цитата не нашлась в источнике даже после
     /// нормализации пробелов, регистра и диакритики, либо не хватало обязательных полей.
     /// Модель что-то нашла, но доказать не смогла, поэтому такой документ не считается сверенным.
     /// </summary>
     public int DiscardedFindings { get; init; }
 
-    /// <summary>No discrepancies were reported by the model; not a guarantee of factual correctness.</summary>
-    public bool IsConsistent => Completed && Findings.Count == 0 && DiscardedFindings == 0;
+    /// <summary>No discrepancies were reported by a full check; not a guarantee of factual correctness.</summary>
+    public bool IsConsistent => Completed && !Partial && Findings.Count == 0 && DiscardedFindings == 0;
 
     /// <summary>The placeholder saved with the document until the background verification replaces it.</summary>
     public static MinutesVerification CreatePending() => new()

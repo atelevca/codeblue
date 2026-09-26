@@ -114,6 +114,8 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
                 ? "Verificare automată: nefinalizată - documentul necesită revizuire manuală."
                 : saved.Verification.IsConsistent
                     ? "Verificare automată: fără discrepanțe raportate."
+                    : saved.Verification.Partial && saved.Verification.Findings.Count == 0 && saved.Verification.DiscardedFindings == 0
+                        ? "Verificare automată pe fragmente: fără discrepanțe; afirmațiile fără suport nu au fost verificate."
                     : saved.Verification.Findings.Count == 0
                         ? "Verificare automată: neconcludentă - constatări fără citat regăsit, necesită revizuire."
                         : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe - necesită revizuire.");

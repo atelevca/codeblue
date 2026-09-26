@@ -1,6 +1,7 @@
 using HealthTech.Audio;
 using HealthTech.Data;
 using HealthTech.Documents;
+using HealthTech.Email;
 using HealthTech.Jobs;
 using HealthTech.Profiles;
 using HealthTech.Speakers;
@@ -109,6 +110,14 @@ builder.Services.AddSingleton<MinutesVerificationQueue>();
 builder.Services.AddSingleton<IMinutesVerificationQueue>(sp => sp.GetRequiredService<MinutesVerificationQueue>());
 builder.Services.AddHostedService<MinutesVerificationWorker>();
 
+// E-mail goes only to the local SMTP catcher (Mailpit, docker-compose.yml at the repo root).
+builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.Host) && o.Port is > 0 and <= 65535 && o.TimeoutSeconds > 0,
+        "Email: Host, Port (1..65535) and TimeoutSeconds (> 0) are required.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
 // Прикладная база (Dapper). Путь относительный — резолвится от content root, как остальные.
 var appDatabasePath = Path.GetFullPath(
     builder.Configuration["Database:AppDatabasePath"] ?? "../data/healthtech.db",
@@ -146,6 +155,7 @@ builder.Services.AddTransient<GenerateMinutesStep>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
 builder.Services.AddExceptionHandler<DocumentExceptionHandler>();
+builder.Services.AddExceptionHandler<EmailExceptionHandler>();
 builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
 
 var app = builder.Build();

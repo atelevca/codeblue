@@ -10,6 +10,8 @@ import {
   QuillDelta,
   SaveRecordRequest,
   SavedDocument,
+  SendEmailRequest,
+  SentEmail,
   TranscriptCorrectionResult,
   TranscriptResult,
   UploadedFile,
@@ -97,6 +99,11 @@ export class CodeBlueApi {
       );
   }
 
+  /** POST /document/sendemail/{id} — mails the saved minutes as PDF via the local SMTP server. */
+  sendEmail(id: ID, req: SendEmailRequest): Observable<SentEmail> {
+    return this.http.post<SentEmail>(`/document/sendemail/${id}`, req);
+  }
+
   /** POST /audio/correctTranscript — re-runs term correction on a finished artifact (service). */
   correctTranscript(
     jobId: ID,
@@ -141,9 +148,9 @@ export function toApiError(err: unknown): ApiError {
   const body = (err.error && typeof err.error === 'object' ? err.error : {}) as ProblemDetails;
   if (body.traceId) console.warn(`API ${err.status} ${body.title ?? ''} traceId=${body.traceId}`);
   const code = body.title ?? (err.status === 0 ? 'NETWORK' : String(err.status));
-  // DocumentService writes its details in Romanian and without paths.
+  // DocumentService and the e-mail sender write their details in Romanian and without paths.
   const message =
-    (code === 'Document error' ? body.detail : undefined) ??
+    (code === 'Document error' || code === 'Email error' ? body.detail : undefined) ??
     ERROR_MESSAGES[code] ??
     STATUS_MESSAGES[err.status] ??
     FALLBACK;

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HealthTech.Audio;
+using HealthTech.Email;
 using HealthTech.Jobs;
 using HealthTech.Speakers;
 using HealthTech.Transcription;
@@ -12,7 +13,7 @@ public sealed class DocumentService(
     IJobRepository jobs, IJobPaths paths, IOptions<TranscriptsOptions> transcripts,
     Lazy<IMeetingMinutesGenerator> generator, IMinutesVerificationQueue verifications,
     ISpeakerBindingService speakers, ISpeakerBindingRepository bindings, IPersonRepository persons,
-    IDocumentPdfRenderer pdf, ILogger<DocumentService> logger) : IDocumentService
+    IDocumentPdfRenderer pdf, IEmailSender email, ILogger<DocumentService> logger) : IDocumentService
 {
     private const string DocumentFileName = "minutes.document.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -46,10 +47,10 @@ public sealed class DocumentService(
     /// к тому моменту давно готов.
     /// </summary>
     public async Task<SavedDocument> GenerateAsync(
-        Guid jobId, IProgress<DocumentPhase>? phase = null, CancellationToken ct = default)
+        Guid jobId, IProgress<DocumentProgress>? progress = null, CancellationToken ct = default)
     {
         var job = await RequireJobAsync(jobId, ct);
-        var document = await SaveCoreAsync(job, null, verify: false, phase, ct);
+        var document = await SaveCoreAsync(job, null, verify: false, progress, ct);
         verifications.Enqueue(jobId);
         return document;
     }
@@ -79,7 +80,7 @@ public sealed class DocumentService(
 
         var transcript = await ReadTranscriptAsync(jobId, ct);
         var metadata = await ReadMetadataAsync(job, ct);
-        var verification = await VerifyOrNoteAsync(transcript, document.MinutesMarkdown, metadata, ct);
+        var verification = await VerifyOrNoteAsync(transcript, document.MinutesMarkdown, metadata, null, ct);
 
         await gate.WaitAsync(ct);
         try
@@ -131,7 +132,7 @@ public sealed class DocumentService(
         : $"{verification.Findings.Count} расхождений, {verification.DiscardedFindings} отброшено";
 
     private async Task<SavedDocument> SaveCoreAsync(
-        Job job, SaveDocumentRequest? request, bool verify, IProgress<DocumentPhase>? phase, CancellationToken ct)
+        Job job, SaveDocumentRequest? request, bool verify, IProgress<DocumentProgress>? progress, CancellationToken ct)
     {
         var jobId = job.Id;
         if (request != null && request.Delta == null)
@@ -144,6 +145,7 @@ public sealed class DocumentService(
         {
             var transcript = await ReadTranscriptAsync(jobId, ct);
             var metadata = await ReadMetadataAsync(job, ct);
+            var minutesProgress = progress == null ? null : new MinutesProgressRelay(progress);
             string markdown;
             QuillDelta delta;
             MinutesVerification verification;
@@ -151,8 +153,7 @@ public sealed class DocumentService(
             {
                 if (request == null)
                 {
-                    phase?.Report(DocumentPhase.ExtractingFacts);
-                    var facts = await generator.Value.ExtractFactsAsync(transcript, metadata, ct);
+                    var facts = await generator.Value.ExtractFactsAsync(transcript, metadata, minutesProgress, ct);
                     // Документ целиком рендерится из фактов в коде: второго вызова модели нет.
                     delta = QuillDocument.FromMarkdown(generator.Value.RenderMinutes(facts));
                     markdown = QuillDocument.ToMarkdown(delta);
@@ -165,8 +166,7 @@ public sealed class DocumentService(
 
                 if (verify)
                 {
-                    phase?.Report(DocumentPhase.Verifying);
-                    verification = await VerifyOrNoteAsync(transcript, markdown, metadata, ct);
+                    verification = await VerifyOrNoteAsync(transcript, markdown, metadata, minutesProgress, ct);
                 }
                 else
                 {
@@ -196,11 +196,11 @@ public sealed class DocumentService(
     /// счёта. Документ сохраняется как есть, а несостоявшаяся сверка помечается явно.
     /// </summary>
     private async Task<MinutesVerification> VerifyOrNoteAsync(
-        string transcript, string markdown, MeetingMetadata? metadata, CancellationToken ct)
+        string transcript, string markdown, MeetingMetadata? metadata, IProgress<MinutesProgress>? progress, CancellationToken ct)
     {
         try
         {
-            return await generator.Value.VerifyMinutesAsync(transcript, markdown, metadata, ct);
+            return await generator.Value.VerifyMinutesAsync(transcript, markdown, metadata, progress, ct);
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or DocumentException))
         {
@@ -223,6 +223,37 @@ public sealed class DocumentService(
         ct.ThrowIfCancellationRequested();
         return new DocumentDownload(content, $"proces-verbal-{jobId}.pdf");
     }
+
+    public async Task<SentEmail> SendEmailAsync(Guid jobId, SendEmailRequest? request, CancellationToken ct = default)
+    {
+        var to = (request?.To ?? [])
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (to.Count == 0)
+            throw new DocumentException(400, "Adăugați cel puțin un destinatar.");
+        if (to.Count > MaxRecipients)
+            throw new DocumentException(400, $"Cel mult {MaxRecipients} destinatari.");
+        var invalid = to.FirstOrDefault(x => !IsPlainAddress(x));
+        if (invalid != null)
+            throw new DocumentException(400, $"„{invalid}” nu este o adresă de e-mail validă.");
+
+        var subject = string.IsNullOrWhiteSpace(request?.Subject) ? "Proces-verbal" : request.Subject.Trim();
+        var body = string.IsNullOrWhiteSpace(request?.Body)
+            ? "Procesul-verbal al ședinței este atașat în format PDF."
+            : request.Body;
+
+        var pdf = await DownloadPdfAsync(jobId, ct);
+        await email.SendAsync(to, subject, body, new EmailAttachment(pdf.FileName, pdf.Content, "application/pdf"), ct);
+        return new SentEmail(to, subject, pdf.FileName);
+    }
+
+    private const int MaxRecipients = 20;
+
+    // Bare "user@host" only: no display names, lists or header tricks from the request.
+    private static bool IsPlainAddress(string value) =>
+        MimeKit.MailboxAddress.TryParse(value, out var mailbox) && mailbox.Address == value && value.Contains('@');
 
     private async Task<Job> RequireJobAsync(Guid jobId, CancellationToken ct) =>
         await jobs.GetAsync(jobId, ct) ?? throw new DocumentException(404, "Jobul nu a fost găsit.");
@@ -307,5 +338,16 @@ public sealed class DocumentService(
         return title == null && participants.Length == 0
             ? null
             : new MeetingMetadata { Title = title, Participants = participants };
+    }
+
+    // Синхронная пересылка: Progress<T> из шага и так уводит доклад в пул потоков.
+    private sealed class MinutesProgressRelay(IProgress<DocumentProgress> target) : IProgress<MinutesProgress>
+    {
+        public void Report(MinutesProgress value) => target.Report(new DocumentProgress(value.Stage switch
+        {
+            MinutesStage.Extracting => DocumentPhase.ExtractingFacts,
+            MinutesStage.Consolidating => DocumentPhase.Consolidating,
+            _ => DocumentPhase.Verifying
+        }, value.Current, value.Total));
     }
 }

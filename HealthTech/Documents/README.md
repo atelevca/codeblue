@@ -99,8 +99,10 @@ listele, `**bold**` și `*italic*`.
 Documentul și raportul sunt salvate atomic în
 `<Transcripts:OutputFolder>/<jobId>/minutes.document.json`.
 404: job/document inexistent; 409: transcriere nefinalizată sau lipsă;
-400: Delta invalid; 422: transcript invalid sau limite LLM depășite.
-Limitele `Minutes` din SemanticKernel se aplică și generării/verificării prin API.
+400: Delta invalid; 422: transcript invalid; 503 `LlmConfiguration`: contextul modelului nu
+cuprinde prompturile și răspunsurile configurate (`Llm:ContextSize`, `Llm:Minutes:ContextSize`).
+Lungimea transcriptului nu este limitată: extragerea și verificarea îl împart în ferestre de
+tokenuri (`docs/long-recordings.md`).
 Citirea și descărcarea nu încarcă modelul LLM. Fluxul audio generează automat MOM la
 finalul transcrierii; `save` fără corp îl regenerează (de exemplu după asocierea vorbitorilor).
 

@@ -6,7 +6,9 @@ public interface IMeetingMinutesGenerator
     Task<MeetingMinutesResult> GenerateAsync(string transcript, MeetingMetadata? metadata = null, CancellationToken ct = default);
 
     /// <param name="metadata">Record title and bound participants, when known; a source of facts next to the transcript.</param>
-    Task<MeetingFacts> ExtractFactsAsync(string transcript, MeetingMetadata? metadata = null, CancellationToken ct = default);
+    /// <param name="progress">Fragment progress; a long transcript is extracted window by window.</param>
+    Task<MeetingFacts> ExtractFactsAsync(string transcript, MeetingMetadata? metadata = null,
+        IProgress<MinutesProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// The minutes Markdown, rendered entirely in code from the facts: no model call. Every heading of the
@@ -15,5 +17,7 @@ public interface IMeetingMinutesGenerator
     string RenderMinutes(MeetingFacts facts);
 
     /// <param name="metadata">The same metadata the facts were extracted with, so a name taken from it is not reported as unsupported.</param>
-    Task<MinutesVerification> VerifyMinutesAsync(string transcript, string minutesMarkdown, MeetingMetadata? metadata = null, CancellationToken ct = default);
+    /// <param name="progress">Fragment progress; a long transcript is verified window by window.</param>
+    Task<MinutesVerification> VerifyMinutesAsync(string transcript, string minutesMarkdown, MeetingMetadata? metadata = null,
+        IProgress<MinutesProgress>? progress = null, CancellationToken ct = default);
 }

@@ -34,6 +34,15 @@ HealthTech/run.sh                                       # macOS: same, profile "
 
 The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the Windows dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`), on macOS via `brew install ffmpeg`. macOS setup is in `docs/running-on-macos.md`. Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
 
+## External dependency: Mailpit (local SMTP)
+
+"Trimite pe e-mail" sends the minutes PDF over plain SMTP to **Mailpit**, a mail catcher on this
+machine; the hackathon's security gate forbids any external SMTP (Gmail, SendGrid, ...). `docker compose
+up -d` at the repo root starts it (`docker-compose.yml`, image pinned, ports bound to `127.0.0.1`:
+SMTP 1025, web inbox http://localhost:8025, messages kept in a volume, update check against GitHub
+disabled). The API runs on the host, so `Email:Host` is `localhost`, not `mailpit`. For offline use,
+pull the image and restore NuGet (MailKit) while online. Mailpit down → `EmailException` → 503.
+
 ## External dependency: models
 
 Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` (CAM++ speaker embeddings; the heavier `wespeaker_en_voxceleb_resnet34_LM.onnx` gave the same turns and took 5× longer, so it is kept in the download script only as an alternative), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The two GGUF files live there too: `qwen2.5-3b-instruct-q4_k_m.gguf` for term correction (`Llm:ModelFile`) and `qwen2.5-7b-instruct-q4_k_m.gguf` for the minutes (`Llm:Minutes:ModelFile`); `download-models.sh` fetches both.
@@ -105,7 +114,9 @@ missing.
 - The three slow steps report progress inside their own band, so the bar keeps moving:
   `"Распознавание: чанк 3 из 7"` (15–70%, the last 5% of the band is left for a diarization that
   outlives Whisper), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
-  `"Генерация протокола: извлечение фактов"` (92%; the document itself is rendered in code, no phase).
+  `"Генерация протокола: извлечение фактов (фрагмент k из n)"` (92–95%, the suffix only when the
+  transcript was split) then `"Генерация протокола: объединение фрагментов"` (95%); the document itself
+  is rendered in code, no phase, and the verification runs in the background after `Completed`.
 - `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
   `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes
   and does not verify: it saves the document with `verification.pending = true` and puts the job id on
@@ -201,11 +212,12 @@ missing.
   changes and why is listed in `docs/running-on-macos.md`, section 5.
 - Settings: `SemanticKernel/appsettings.llm.json` (copied to output with `Prompts/` and `Glossary/`) gives defaults for the `Llm` section; the app's own config/env vars (`Llm__*`, `Llm__Minutes__ModelFile`) override.
 - `KernelFactory` (one per role) checks the model path in its constructor (missing → `LlmModelNotFoundException` → 503 via `LlmModelNotFoundExceptionHandler`, before any transcription work) but loads the weights only on first use. The chat prompt uses the model's own chat template (`PromptTemplateTransformer`).
+- `KernelFactory` is also the `ITokenCounter` of its model (keyed by role like the provider): it counts with the GGUF tokenizer, rendering prompts through the same chat template. Every LLM request is sized in real tokens against that model's context (`TokenBudget.ForInput(context, reply)` with a 5% margin), never in characters — the old character limits (`Llm:MaxBatchCharacters`, `Minutes:MaxTranscriptCharacters`, `Minutes:MaxVerificationCharacters`) are gone. On first load it checks, for each role it serves, that the context fits the largest of that role's prompts (`*_correction.system.txt` for correction, `minutes_*.system.txt` for minutes), the largest reply and a 1000-token window; otherwise `LlmConfigurationException` (503, same handler, `title` = `LlmConfiguration`). The failure is cached so the weights are not reloaded on every call.
 - `CorrectTermsStep` corrects the aligned turns (turn index + 1 = segment id) and saves
   `<transcripts>/<jobId>/<name>.medical_corrections.md`. The system prompt and glossaries come from the
   job's profile (`RecordProfileContent`), not from hard-coded file names.
 - `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
-- `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
+- `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (a batch closes on real token size — the full request with `lowConfidence` lists, context and glossary lines next to `Llm:MaxTokens`, and the echoed pieces within 80% of `Llm:MaxTokens` — or at `BatchSize`; on the failing 10-minute job the `lowConfidence` JSON alone was 21k characters against 8k of text, which is what overflowed the old character cap), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece; each request logs `X/Y input tokens`.
 - **The model returns only the pieces it changed** (`[]` when nothing changed); the prompts say so and
   `RequestCorrectionsAsync` accepts any subset of the batch ids (no unknown id, no duplicate). Echoing the
   whole batch back cost ~1,000 output tokens per batch on the CPU for text that mostly did not change.
@@ -238,18 +250,28 @@ missing.
 
 **Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
 from the speakers transcript, the document is rendered from them in code, and a verification pass checks
-it against the transcript. The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
-`GET /jobs/{id}/transcript`), and the record title plus the bound persons go along as `metadata`. The
-facts (`MeetingFacts`, snake_case JSON) have the shape of the document: header, participants, agenda,
-decisions/actions/open issues with an `agenda_id`, next meeting, summary. **There is no "write the
-minutes" model call**: `RenderMinutes` builds the whole Markdown (header, participants, agenda, course
-of the meeting, the three tables, next meeting, summary, signatures) from the normalized facts. That call
-used to cost ~96 s of 7B on the CPU and added nothing the facts did not hold. The verification runs
-**after** the job is `Completed`, in the background (see the jobs section), with
+it against the transcript. A transcript of any length works: extraction and verification split it into
+token-sized windows of whole turns (`TranscriptWindows`, `Minutes:MaxWindowTokens` = 4000 on every machine),
+facts of the windows are merged in code (`MeetingFactsMerger`) and one small consolidation call
+(`minutes_consolidation.system.txt`, titles + fragment summaries only) groups repeated topics and writes the
+summary; a short transcript is exactly the single request it always was. Details in
+`SemanticKernel/Minutes/README.md`; the whole long-recordings design — budgets, windows,
+`verification.partial`, settings, log lines, measurements — in `docs/long-recordings.md`. The transcript is
+the named dialogue (bound doctors' names instead of `Speaker N`, same as `GET /jobs/{id}/transcript`), and
+the record title plus the bound persons go along as `metadata`. The facts (`MeetingFacts`, snake_case JSON)
+have the shape of the document: header, participants, agenda, decisions/actions/open issues with an
+`agenda_id`, next meeting, summary. **There is no "write the minutes" model call**: `RenderMinutes`
+(`MinutesRenderer`) builds the whole Markdown (header, participants, agenda, course of the meeting, the
+three tables, next meeting, summary, signatures) from the normalized facts, following the stage 2 template
+of commit `3172c27`. That call used to cost ~96 s of 7B on the CPU and added nothing the facts did not hold.
+The verification runs **after** the job is `Completed`, in the background (see the jobs section), with
 `Minutes:VerificationMaxRetries` = 0: a failed verification tends to fail the same way again and each
 attempt costs minutes. `POST /document/save/{jobId}` (regenerate or save an edit) still verifies
 synchronously — that is the "button". `GET /document/get` returns `verification.pending = true` until
-the background pass has written its result. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
+the background pass has written its result. When transcript and document do not fit one request, the
+whole document is checked against each transcript window and the result carries `verification.partial =
+true`: `Unsupported` cannot be judged from a fragment and is dropped, and such a document is never
+`isConsistent`, even with no findings (UI and PDF show a separate "checked in fragments" state). Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
 each with an optional `section`. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
 PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
 Linux (`Documents:FontDirectory` overrides). The PDF carries the Medpark letterhead taken from
@@ -268,7 +290,10 @@ embedded resources) in the page header, teal `#007C84` rules and headings, grey 
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
   `transcribeWithSpeakers`) are gone: with per-job folders "the first file in a shared directory" is meaningless.
 - `DocumentController` — `GET /document/get/{jobId}`, `POST /document/save/{jobId}` (no body: regenerate;
-  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`.
+  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`,
+  `POST /document/sendemail/{jobId}` (`{ to[], subject, body }` → the PDF attached, sent by
+  `SmtpEmailSender` in `HealthTech/Email/`: MailKit, no TLS/auth, new client per call, `Email:TimeoutSeconds`;
+  bare addresses only, ≤ 20; the body is never logged).
 - `MainController` (`GET /main/run`) is a template placeholder.
 
 `JobStatus` is serialized as a string (`"Running"`), not as an enum number.
