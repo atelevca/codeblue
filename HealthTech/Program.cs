@@ -1,5 +1,6 @@
 using HealthTech.Audio;
 using HealthTech.Data;
+using HealthTech.Documents;
 using HealthTech.Jobs;
 using HealthTech.Profiles;
 using HealthTech.Transcription;
@@ -88,6 +89,11 @@ builder.Services.AddSingleton<ITranscriptCorrectionService, TranscriptCorrection
 // Local LLM (LLamaSharp + Semantic Kernel) for medical term correction; defaults in appsettings.llm.json, "Llm" section overrides.
 // The GGUF model is checked when the speaker transcript service is first used, not at startup.
 builder.Services.AddMedicalTermCorrection(builder.Configuration);
+// Reading/downloading an existing document must not load or require the LLM.
+builder.Services.AddSingleton(sp => new Lazy<SemanticKernel.Minutes.IMeetingMinutesGenerator>(
+    () => sp.GetRequiredService<SemanticKernel.Minutes.IMeetingMinutesGenerator>()));
+builder.Services.AddSingleton<IDocumentPdfRenderer, DocumentPdfRenderer>();
+builder.Services.AddSingleton<IDocumentService, DocumentService>();
 
 // Прикладная база (Dapper). Путь относительный — резолвится от content root, как остальные.
 var appDatabasePath = Path.GetFullPath(
@@ -122,6 +128,7 @@ builder.Services.AddTransient<SaveResultStep>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
+builder.Services.AddExceptionHandler<DocumentExceptionHandler>();
 builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
 
 var app = builder.Build();
