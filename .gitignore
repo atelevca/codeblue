@@ -22,3 +22,11 @@ appsettings.Development.json
 
 # Локальные базы (WorkflowCore и прикладная)
 /data/
+
+# macOS
+.DS_Store
+
+# Папки заданий: загрузки и промежуточные WAV (сотни мегабайт, файлы > 100 МБ GitHub не примет).
+# Образцы в корне assets/input и assets/processed остаются в репозитории.
+/assets/input/*/
+/assets/processed/*/

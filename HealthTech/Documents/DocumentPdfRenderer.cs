@@ -111,15 +111,18 @@ internal sealed class DocumentFontResolver(string? configuredDirectory) : IFontR
     public byte[] GetFont(string faceName)
     {
         var windows = OperatingSystem.IsWindows();
+        var mac = OperatingSystem.IsMacOS();
         var directory = configuredDirectory ?? (windows
             ? Environment.GetFolderPath(Environment.SpecialFolder.Fonts)
-            : "/usr/share/fonts/truetype/dejavu");
+            : mac ? "/System/Library/Fonts/Supplemental" : "/usr/share/fonts/truetype/dejavu");
         var name = windows
             ? (faceName == "document-bold" ? "arialbd.ttf" : "arial.ttf")
-            : (faceName == "document-bold" ? "DejaVuSans-Bold.ttf" : "DejaVuSans.ttf");
+            : mac
+                ? (faceName == "document-bold" ? "Arial Bold.ttf" : "Arial.ttf")
+                : (faceName == "document-bold" ? "DejaVuSans-Bold.ttf" : "DejaVuSans.ttf");
         var path = Path.Combine(directory, name);
         if (!File.Exists(path))
-            throw new DocumentException(503, "Fonturile PDF lipsesc. Configurați Documents:FontDirectory (Arial pe Windows, DejaVu Sans pe Linux).");
+            throw new DocumentException(503, "Fonturile PDF lipsesc. Configurați Documents:FontDirectory (Arial pe Windows și macOS, DejaVu Sans pe Linux).");
         return File.ReadAllBytes(path);
     }
 }

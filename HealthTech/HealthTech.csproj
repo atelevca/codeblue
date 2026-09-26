@@ -17,9 +17,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
-    <!-- Vulkan (GPU) is tried first; the plain CPU runtime is the fallback when no Vulkan driver is present. -->
+    <!-- On macOS (Apple Silicon) the plain runtime already includes the Metal GPU backend and Accelerate BLAS.
+         On Windows/Linux, Vulkan (GPU) is tried first; the plain CPU runtime is the fallback when no Vulkan driver is present. -->
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
-    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" Condition="!$([MSBuild]::IsOSPlatform('OSX'))" />
     <PackageReference Include="WorkflowCore" Version="3.21.0" />
     <PackageReference Include="WorkflowCore.Persistence.Sqlite" Version="3.21.0" />
   </ItemGroup>

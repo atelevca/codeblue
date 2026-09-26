@@ -22,6 +22,18 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "GGML_VK_VISIBLE_DEVICES": "1"
       }
+    },
+    "mac": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5089",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "WHISPER_GPU_DEVICE": "0",
+        "Llm__GpuLayerCount": "999"
+      }
     }
   }
 }
