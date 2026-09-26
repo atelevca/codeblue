@@ -33,6 +33,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "WHISPER_GPU_DEVICE": "0",
         "Llm__GpuLayerCount": "999",
+        "Llm__Minutes__GpuLayerCount": "999",
         "Llm__ContextSize": "32768",
         "Llm__MaxTokens": "4096",
         "Minutes__MaxTranscriptCharacters": "55000",

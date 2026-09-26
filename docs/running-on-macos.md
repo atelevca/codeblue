@@ -30,10 +30,10 @@ export Audio__FfprobePath=/opt/homebrew/bin/ffprobe
 
 ## 2. Модели
 
-Приложение **никогда не скачивает модели само**. Положите пять файлов в `models/`
-в корне репозитория (каталог в `.gitignore`). Все, кроме GGUF, скачивает
+Приложение **никогда не скачивает модели само**. Положите шесть файлов в `models/`
+в корне репозитория (каталог в `.gitignore`). Все, включая оба GGUF, скачивает
 `./download-models.sh` из корня репозитория (на Windows — из Git Bash); уже скачанные
-файлы он пропускает. GGUF кладётся руками:
+файлы он пропускает:
 
 | Файл | Что это | Размер |
 |---|---|---|
@@ -41,11 +41,13 @@ export Audio__FfprobePath=/opt/homebrew/bin/ffprobe
 | `pyannote-segmentation-3.0.onnx` | сегментация речи | ~6 МБ |
 | `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` | эмбеддинги голосов (CAM++) | ~27 МБ |
 | `silero_vad.onnx` | детектор речи | ~2 МБ |
-| `qwen2.5-7b-instruct-q4_k_m.gguf` | LLM для коррекции и протокола | ~4,7 ГБ |
+| `qwen2.5-3b-instruct-q4_k_m.gguf` | LLM коррекции терминов (`Llm:ModelFile`) | ~2,1 ГБ |
+| `qwen2.5-7b-instruct-q4_k_m.gguf` | LLM протокола: факты и сверка (`Llm:Minutes:ModelFile`) | ~4,7 ГБ |
 
 Отсутствие любого из первых четырёх **роняет старт** с указанием пути — это сделано
 намеренно, валидаторами `ValidateOnStart`. Отсутствие GGUF роняет не старт, а первое
-обращение к LLM (503 `LlmModelNotFound`).
+обращение к соответствующей LLM (503 `LlmModelNotFound`): без 3B падает шаг коррекции,
+без 7B — шаг протокола.
 
 Turbo-версию Whisper не берите: на румынском она зацикливается, поэтому в конфиге
 стоит именно large-v3.
@@ -58,8 +60,9 @@ HealthTech/run.sh
 ```
 
 Слушает `http://localhost:5089`, Swagger на `/swagger`. Профиль `mac` включает Whisper на
-Metal (`WHISPER_GPU_DEVICE=0`) и выгружает все слои LLM на GPU (`Llm__GpuLayerCount=999`).
-Профиль `http` на Mac тоже работает, но LLM в нём считается на CPU.
+Metal (`WHISPER_GPU_DEVICE=0`) и выгружает все слои обеих LLM на GPU (`Llm__GpuLayerCount=999`
+для 3B и `Llm__Minutes__GpuLayerCount=999` для 7B). Профиль `http` на Mac тоже работает,
+но обе LLM в нём считаются на CPU.
 
 `HealthTech/run.bat` и профили `http`/`https` — для Windows: они выставляют
 `GGML_VK_VISIBLE_DEVICES` под Vulkan, которого на macOS нет.
@@ -92,26 +95,54 @@ Now listening on: http://localhost:5089
 `ggml_metal_device_init: GPU name: ...`.
 
 **LLM.** `LLamaSharp.Backend.Cpu` уже содержит `libggml-metal.dylib` для `osx-arm64`.
+`LLamaSharp.Backend.Vulkan` (для Intel Arc на Windows) в `SemanticKernel.csproj` подключается
+только не на macOS — тем же условием `IsOSPlatform('OSX')`, что и Whisper Vulkan.
 В `SemanticKernel/appsettings.llm.json` стоит `"GpuLayerCount": 0` — это значение для
-Windows-машины, его не трогаем. Профиль `mac` переопределяет его переменной
-`Llm__GpuLayerCount=999` (все слои на GPU).
+Windows-машины (там 4 ГБ Arc делятся с Whisper, и выгрузка LLM замедляла Whisper в 2,6 раза),
+его не трогаем. Профиль `mac` переопределяет его переменными `Llm__GpuLayerCount=999` и
+`Llm__Minutes__GpuLayerCount=999` (все слои обеих моделей на Metal; unified memory M-серии
+вмещает 3B + 7B + Whisper без спора за память).
 
 **Диаризация.** sherpa-onnx тянет нативные пакеты под `osx-arm64` и `osx-x64`
 автоматически, делать ничего не нужно.
 
-## 5. Переменные окружения
+## 5. Что именно меняется в конфигах для Mac
 
-Любую настройку из `appsettings.json` можно переопределить переменной, заменив `:` на `__`:
+Файлы `appsettings.json` и `SemanticKernel/appsettings.llm.json` хранят значения для
+Windows-машины и **не редактируются**. Всё macOS-специфичное — это переменные окружения
+профиля `mac` в `HealthTech/Properties/launchSettings.json` (их и выставляет `run.sh`):
+
+| Переменная | Значение в профиле `mac` | Зачем |
+|---|---|---|
+| `WHISPER_GPU_DEVICE` | `0` | Metal показывает один GPU; на Windows стоит `1` (Arc) |
+| `Llm__GpuLayerCount` | `999` | все слои 3B (коррекция) на Metal; в json стоит `0` |
+| `Llm__Minutes__GpuLayerCount` | `999` | все слои 7B (протокол) на Metal. В json ключ `Llm:Minutes:GpuLayerCount` не задан, поэтому 7B унаследовал бы верхнее значение и так; строка делает намерение явным и защищает от появления `0` в секции `Minutes` |
+| `Llm__ContextSize` | `32768` | длинные записи целиком в контекст; наследуется и 7B (`Llm:Minutes:ContextSize` не задан) |
+| `Llm__MaxTokens` | `4096` | длиннее ответ коррекции для больших батчей |
+| `Minutes__MaxTranscriptCharacters` | `55000` | транскрипт часовой записи для извлечения фактов |
+| `Minutes__MaxVerificationCharacters` | `65000` | транскрипт + документ для сверки |
+| `Minutes__ExtractionMaxTokens` | `4096` | JSON фактов длинной записи |
+| `Minutes__VerificationMaxTokens` | `4096` | отчёт сверки длинной записи |
+
+Чего в профиле `mac` **нет** и быть не должно: `GGML_VK_VISIBLE_DEVICES` (Vulkan, только
+Windows). Ключи `Llm__Minutes__ModelFile` и `Llm__ModelFile` не трогаем: файлы моделей те же,
+что на Windows. Настройки ниже не зависят от ОС и на Mac остаются как в json:
+`Minutes__MaxRetries=1` (извлечение фактов), `Minutes__VerificationMaxRetries=0` (сверка без
+повторов, идёт в фоне после `Completed`), `Llm__MaxGlossaryCharacters=1000`.
+
+Поменять что-то разово можно, не трогая профиль — любая настройка переопределяется
+переменной, где `:` заменён на `__`:
 
 ```sh
-export Whisper__UseGpu=false          # принудительно CPU
-export Llm__GpuLayerCount=-1          # выгрузить LLM на Metal
+export Whisper__UseGpu=false                 # принудительно CPU для Whisper
+export Llm__GpuLayerCount=0                  # 3B на CPU (например, чтобы освободить GPU)
+export Llm__Minutes__ModelFile=qwen2.5-3b-instruct-q4_k_m.gguf   # одна модель на обе роли, грузится один раз
 export Audio__FfmpegPath=/opt/homebrew/bin/ffmpeg
-export Uploads__MaxBytes=2147483648   # поднять лимит загрузки до 2 ГБ
+export Uploads__MaxBytes=2147483648          # поднять лимит загрузки до 2 ГБ
 ```
 
-`GGML_VK_VISIBLE_DEVICES` в профилях `http`/`https` нужна Windows-машине. Профиль `mac`
-её не выставляет.
+Если `Llm__Minutes__ModelFile` совпадает с `Llm__ModelFile`, `KernelFactory` создаётся одна и
+веса грузятся один раз; на Mac с 16 ГБ это способ уложиться в память ценой качества протокола.
 
 ## 6. Где хранятся данные
 
@@ -141,7 +172,12 @@ logs/healthtech-*.log       Serilog, хранится 14 файлов
 | коррекция терминов | ~5 мин |
 | генерация протокола | 6–10 мин |
 
-На той же записи, Apple M3 Max, профиль `mac` (Whisper и LLM на Metal):
+После перехода на 3B для коррекции, ответ «только изменённые куски» и рендер протокола из
+фактов в коде (Windows, Release, LLM на CPU): распознавание 43 с, коррекция 62 с, извлечение
+фактов ~80 с, вся задача 204 с; сверка (~1 мин) идёт уже после `Completed`.
+
+На той же записи, Apple M3 Max, профиль `mac` (Whisper и LLM на Metal), замер до этих
+изменений — на 7B для коррекции:
 
 | шаг | время |
 |---|---|
@@ -149,6 +185,9 @@ logs/healthtech-*.log       Serilog, хранится 14 файлов
 | распознавание | ~16 с |
 | диаризация | ~14 с |
 | коррекция терминов | ~16 с |
+
+С 3B и укороченным ответом коррекция на Metal должна стать заметно короче; цифры после
+изменений на Mac ещё не снимались.
 
 ## 8. Известные грабли
 

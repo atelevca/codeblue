@@ -196,7 +196,9 @@ missing.
   large-v3, the process spilled into shared memory and Whisper went from 43 s to 123 s while the correction
   batch only went from 62 s to 41 s — a net loss of a minute. Offload pays off only if Whisper leaves room
   (a quantized `ggml-large-v3-q5_0` or a different GPU); re-measure the whole pipeline, not the LLM step
-  alone. The mac profile sets `Llm__GpuLayerCount=999` (Metal, unified memory).
+  alone. The mac profile sets `Llm__GpuLayerCount=999` and `Llm__Minutes__GpuLayerCount=999` (Metal, unified
+  memory); the Vulkan package is skipped on macOS by an `IsOSPlatform('OSX')` condition. What the mac profile
+  changes and why is listed in `docs/running-on-macos.md`, section 5.
 - Settings: `SemanticKernel/appsettings.llm.json` (copied to output with `Prompts/` and `Glossary/`) gives defaults for the `Llm` section; the app's own config/env vars (`Llm__*`, `Llm__Minutes__ModelFile`) override.
 - `KernelFactory` (one per role) checks the model path in its constructor (missing → `LlmModelNotFoundException` → 503 via `LlmModelNotFoundExceptionHandler`, before any transcription work) but loads the weights only on first use. The chat prompt uses the model's own chat template (`PromptTemplateTransformer`).
 - `CorrectTermsStep` corrects the aligned turns (turn index + 1 = segment id) and saves
