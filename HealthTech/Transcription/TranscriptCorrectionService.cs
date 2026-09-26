@@ -66,7 +66,10 @@ namespace HealthTech.Transcription
                     ReadString(item, "speaker") ?? "",
                     TimeSpan.FromSeconds(ReadSeconds(item, "start")),
                     TimeSpan.FromSeconds(ReadSeconds(item, "end")),
-                    ReadString(item, "text")!))
+                    ReadString(item, "text")!)
+                {
+                    LowConfidence = ReadLowConfidence(item)
+                })
                 .ToList();
             _logger.LogInformation("Correcting medical terms in {Path}: {SegmentCount} segment(s)", path, segments.Count);
 
@@ -75,7 +78,16 @@ namespace HealthTech.Transcription
 
             for (var i = 0; i < items.Count; i++)
             {
+                if (ReadString(items[i], "text") == corrected[i].Text)
+                {
+                    continue;
+                }
+
                 items[i]["text"] = corrected[i].Text;
+                // Текст переписан - смещения указывают в старую строку, и починить их нечем.
+                // Поле убирается целиком: отсутствующее честнее указывающего не туда.
+                // То же правило работает в конвейере (CorrectTermsStep).
+                items[i].Remove("lowConfidence");
             }
             // A speaker transcript also has the whole dialogue as "text": rebuild it from the corrected turns.
             if (root["text"] is JsonValue && segments.All(s => s.Speaker.Length > 0))
@@ -152,6 +164,33 @@ namespace HealthTech.Transcription
 
             throw new AudioProcessingException(AudioProcessingError.InvalidTranscript,
                 $"'{Path.GetFileName(path)}' has no \"turns\" or \"segments\" with text (a diarization file can't be corrected).");
+        }
+
+        // Поле необязательное: файлы, записанные до его появления, читаются как раньше -
+        // с пустым списком, а не с ошибкой. Битый элемент пропускается, весь файл из-за
+        // одного кривого слова терять незачем.
+        private static IReadOnlyList<LowConfidenceWord> ReadLowConfidence(JsonObject item)
+        {
+            if (item["lowConfidence"] is not JsonArray array)
+            {
+                return [];
+            }
+
+            var words = new List<LowConfidenceWord>(array.Count);
+            foreach (var node in array)
+            {
+                if (node is not JsonObject word
+                    || word["at"] is not JsonValue atValue || !atValue.TryGetValue<int>(out var at)
+                    || word["word"] is not JsonValue wordValue || !wordValue.TryGetValue<string>(out var text)
+                    || string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                var p = word["p"] is JsonValue pValue && pValue.TryGetValue<double>(out var value) ? value : 0;
+                words.Add(new LowConfidenceWord(at, text, p));
+            }
+            return words;
         }
 
         private static string? ReadString(JsonObject item, string name) =>
