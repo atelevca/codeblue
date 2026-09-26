@@ -1,33 +1,45 @@
 @HealthTech_HostAddress = http://localhost:5089
-@JobId = 00000000-0000-0000-0000-000000000000
+@FileId = 00000000-0000-0000-0000-000000000000
 
-### Типы записей для выпадашки при загрузке
+### Типы записей для выпадашки: medical | administrative | financial
 GET {{HealthTech_HostAddress}}/profiles
 Accept: application/json
 
 ###
-# Загрузка файла и запуск обработки. Возвращает { "jobId": "..." } сразу,
-# не дожидаясь конца обработки. Multipart из .http-файла неудобен, проще curl:
+# Фаза 1 — загрузка файла. Multipart из .http-файла неудобен, проще curl:
 #
-#   curl.exe -X POST http://localhost:5089/jobs \
-#     -F "file=@assets/input/Medpark_audio_2min.m4a" \
-#     -F "profile=consilium"
+#   curl.exe -X POST http://localhost:5089/files \
+#     -F "file=@assets/input/Medpark_audio_2min.m4a"
+#
+# Ответ: { fileId, fileName, sizeBytes, format, durationSec }.
+# Обработка при этом НЕ запускается; битый файл отбивается здесь же, 422.
 
-### Список заданий, новые сверху
+### Фаза 2 — оформление записи. Именно этот запрос запускает конвейер.
+POST {{HealthTech_HostAddress}}/jobs
+Content-Type: application/json
+
+{
+  "fileId": "{{FileId}}",
+  "title": "Vizită ATI — 26 sept",
+  "speakersCount": 4,
+  "discussionType": "medical"
+}
+
+### Список записей, новые сверху. Загруженные, но не оформленные файлы сюда не попадают.
 GET {{HealthTech_HostAddress}}/jobs
 Accept: application/json
 
-### Статус задания: status, currentStep, percent, error
+### Карточка и состояние: status, currentStep, percent, error
 # currentStep внутри долгих шагов уточняется: "Распознавание: чанк 3 из 7".
-GET {{HealthTech_HostAddress}}/jobs/{{JobId}}
+GET {{HealthTech_HostAddress}}/jobs/{{FileId}}
 Accept: application/json
 
 ### Результат: транскрипт со спикерами и диалогом
-GET {{HealthTech_HostAddress}}/jobs/{{JobId}}/result
+GET {{HealthTech_HostAddress}}/jobs/{{FileId}}/result
 Accept: application/json
 
-### Повторная коррекция терминов в уже готовом артефакте задания
+### Повторная коррекция терминов в уже готовом артефакте записи
 # Позволяет крутить глоссарии и промпты, не переплачивая за распознавание.
 # Файл ищется в transcripts/<jobId>/; имя — без каталогов, ".json" можно опустить.
-POST {{HealthTech_HostAddress}}/audio/correctTranscript?jobId={{JobId}}&fileName=Medpark_audio_2min.speakers.json&profile=consilium
+POST {{HealthTech_HostAddress}}/audio/correctTranscript?jobId={{FileId}}&fileName=Medpark_audio_2min.speakers.json&profile=medical
 Accept: application/json
