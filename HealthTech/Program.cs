@@ -1,6 +1,7 @@
 using HealthTech.Audio;
 using HealthTech.Data;
 using HealthTech.Jobs;
+using HealthTech.Profiles;
 using HealthTech.Transcription;
 using HealthTech.Workflow;
 using HealthTech.Workflow.Steps;
@@ -92,6 +93,9 @@ Directory.CreateDirectory(Path.GetDirectoryName(workflowDatabasePath)!);
 builder.Services.AddWorkflow(options => options.UseSqlite(
     $"Data Source={workflowDatabasePath};", canCreateDB: true));
 
+builder.Services.Configure<ProfileOptions>(builder.Configuration.GetSection(ProfileOptions.SectionName));
+builder.Services.AddSingleton<IProfileCatalog, ProfileCatalog>();
+
 builder.Services.AddSingleton<IJobProgress, JobProgress>();
 builder.Services.AddTransient<StubStep>();
 
@@ -103,19 +107,20 @@ var app = builder.Build();
 
 app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
 
-var workflowHost = app.Services.GetRequiredService<IWorkflowHost>();
-workflowHost.RegisterWorkflow<TranscriptionWorkflow, TranscriptionJobData>();
-workflowHost.Start();
-app.Lifetime.ApplicationStopping.Register(() => workflowHost.Stop());
-
-// После перезапуска инстансы WorkflowCore поднимутся сами, но строки Jobs остались бы
-// в Running навсегда. Честнее пометить их упавшими, чем показывать вечную обработку.
+// Строго до workflowHost.Start(): после перезапуска движок возобновит свои инстансы,
+// и если пометить задания позже, возобновлённый шаг вернёт строку в Running и она
+// застрянет там навсегда. Помечаем упавшими заранее - шаги увидят Failed и не тронут задание.
 var orphaned = await app.Services.GetRequiredService<IJobRepository>()
     .FailRunningAsync("Приложение было перезапущено во время обработки.");
 if (orphaned > 0)
 {
     app.Logger.LogWarning("Помечено как Failed после перезапуска: {Count} задани(й)", orphaned);
 }
+
+var workflowHost = app.Services.GetRequiredService<IWorkflowHost>();
+workflowHost.RegisterWorkflow<TranscriptionWorkflow, TranscriptionJobData>();
+workflowHost.Start();
+app.Lifetime.ApplicationStopping.Register(() => workflowHost.Stop());
 
 app.UseExceptionHandler();
 

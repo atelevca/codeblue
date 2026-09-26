@@ -8,8 +8,11 @@ namespace HealthTech.Transcription
 {
     public interface ISpeechRecognitionService
     {
-        /// <summary>Transcribes 16 kHz mono float samples in [-1, 1].</summary>
-        Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Transcribes 16 kHz mono float samples in [-1, 1]. <paramref name="prompt"/> is the record
+        /// profile's steering phrase; an empty string means no initial prompt.
+        /// </summary>
+        Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, string prompt, CancellationToken cancellationToken = default);
     }
 
     // Singleton: the ggml large-v3 model is ~3 GB, so the factory (which holds it) is loaded once and reused.
@@ -64,7 +67,8 @@ namespace HealthTech.Transcription
                 RuntimeOptions.LoadedLibrary, _options.UseGpu, _options.GpuDevice);
         }
 
-        public async Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, CancellationToken cancellationToken = default)
+        public async Task<List<TranscriptSegment>> TranscribeAsync(
+            float[] samples, string prompt, CancellationToken cancellationToken = default)
         {
             await _gate.WaitAsync(cancellationToken);
             try
@@ -73,9 +77,12 @@ namespace HealthTech.Transcription
                     .WithLanguage(_options.Language)
                     .WithThreads(Environment.ProcessorCount);
 
-                if (!string.IsNullOrWhiteSpace(_options.Prompt))
+                // Профиль записи задаёт свою фразу; Whisper:Prompt остаётся запасным значением
+                // для профилей, у которых WhisperPrompt пуст.
+                var initialPrompt = string.IsNullOrWhiteSpace(prompt) ? _options.Prompt : prompt;
+                if (!string.IsNullOrWhiteSpace(initialPrompt))
                 {
-                    builder.WithPrompt(_options.Prompt);
+                    builder.WithPrompt(initialPrompt);
                 }
                 if (_options.BeamSize > 1)
                 {

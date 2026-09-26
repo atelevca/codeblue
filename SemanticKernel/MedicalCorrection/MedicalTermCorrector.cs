@@ -16,13 +16,6 @@ namespace SemanticKernel.MedicalCorrection
     /// </summary>
     public class MedicalTermCorrector : IMedicalTermCorrector
     {
-        private const string SystemPromptFile = "Prompts/medical_correction.system.txt";
-        private const string MedicalGlossaryFile = "Glossary/medical_glossary.txt";
-        private const string SpeechGlossaryFile = "Glossary/moldova_speech_glossary.txt";
-        private const string MedicalGlossaryHeading = "Reference medical terms (use only to recognize misheard words):";
-        private const string SpeechGlossaryHeading =
-            "Normal Moldovan mixed speech (NOT errors, keep these words exactly as written; use only to understand the sentence):";
-
         // Context pieces only help the model understand the topic; long ones are cut to their end.
         private const int MaxContextPieceLength = 400;
 
@@ -35,8 +28,6 @@ namespace SemanticKernel.MedicalCorrection
         private readonly IChatCompletionProvider _chatProvider;
         private readonly LlmOptions _options;
         private readonly ILogger<MedicalTermCorrector> _logger;
-        private readonly string _systemPrompt;
-        private readonly IReadOnlyList<Glossary> _glossaries;
         private readonly SemaphoreSlim _runLock = new(1, 1);
 
         public MedicalTermCorrector(IChatCompletionProvider chatProvider, IOptions<LlmOptions> options, ILogger<MedicalTermCorrector> logger)
@@ -44,21 +35,13 @@ namespace SemanticKernel.MedicalCorrection
             _chatProvider = chatProvider;
             _options = options.Value;
             _logger = logger;
-            _systemPrompt = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, SystemPromptFile));
-            _glossaries =
-            [
-                Glossary.Load(Path.Combine(AppContext.BaseDirectory, MedicalGlossaryFile), MedicalGlossaryHeading),
-                Glossary.Load(Path.Combine(AppContext.BaseDirectory, SpeechGlossaryFile), SpeechGlossaryHeading)
-            ];
         }
 
         /// <summary>A sentence piece of a segment's text. <see cref="Text"/> is trimmed; the whitespace is kept aside.</summary>
         private record Piece(int Id, int SegmentIndex, Segment Segment, string Leading, string Text, string Trailing);
 
-        public Task<IReadOnlyList<Segment>> CorrectAsync(IReadOnlyList<Segment> segments, CancellationToken ct = default) =>
-            CorrectAsync(segments, new CorrectionLog(), ct);
-
-        public async Task<IReadOnlyList<Segment>> CorrectAsync(IReadOnlyList<Segment> segments, CorrectionLog log, CancellationToken ct = default)
+        public async Task<IReadOnlyList<Segment>> CorrectAsync(
+            IReadOnlyList<Segment> segments, RecordProfileContent profile, CorrectionLog log, CancellationToken ct = default)
         {
             var pieces = SplitIntoPieces(segments);
             if (pieces.Count == 0)
@@ -81,7 +64,7 @@ namespace SemanticKernel.MedicalCorrection
                     var context = done.TakeLast(_options.ContextSegments).Select(p => p with { Text = finalTexts[p.Id] }).ToList();
 
                     var stopwatch = Stopwatch.StartNew();
-                    var corrections = await RequestCorrectionsAsync(chat, context, batch, i + 1, ct);
+                    var corrections = await RequestCorrectionsAsync(chat, profile, context, batch, i + 1, ct);
                     foreach (var piece in batch)
                     {
                         finalTexts[piece.Id] = Apply(piece, corrections, log);
@@ -163,10 +146,11 @@ namespace SemanticKernel.MedicalCorrection
 
         // Returns id -> corrected text, or null when the model never produced a usable answer for the batch.
         private async Task<Dictionary<int, string>?> RequestCorrectionsAsync(
-            IChatCompletionService chat, IReadOnlyList<Piece> context, IReadOnlyList<Piece> batch, int batchNumber, CancellationToken ct)
+            IChatCompletionService chat, RecordProfileContent profile, IReadOnlyList<Piece> context,
+            IReadOnlyList<Piece> batch, int batchNumber, CancellationToken ct)
         {
-            var history = new ChatHistory(_systemPrompt);
-            history.AddUserMessage(BuildUserMessage(context, batch));
+            var history = new ChatHistory(profile.SystemPrompt);
+            history.AddUserMessage(BuildUserMessage(profile, context, batch));
             var settings = new LLamaSharpPromptExecutionSettings
             {
                 Temperature = _options.Temperature,
@@ -213,7 +197,7 @@ namespace SemanticKernel.MedicalCorrection
             return null;
         }
 
-        private string BuildUserMessage(IReadOnlyList<Piece> context, IReadOnlyList<Piece> batch)
+        private string BuildUserMessage(RecordProfileContent profile, IReadOnlyList<Piece> context, IReadOnlyList<Piece> batch)
         {
             var request = new
             {
@@ -224,7 +208,7 @@ namespace SemanticKernel.MedicalCorrection
             // "\n" rather than AppendLine: the prompt shouldn't depend on the OS line ending.
             var builder = new StringBuilder(JsonSerializer.Serialize(request, RequestJsonOptions));
             var texts = batch.Select(p => p.Text).ToList();
-            foreach (var glossary in _glossaries)
+            foreach (var glossary in profile.Glossaries)
             {
                 var lines = glossary.Select(texts, _options.MaxGlossaryCharacters);
                 if (lines.Count > 0)
