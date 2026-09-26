@@ -136,6 +136,14 @@ missing.
 - `IProcessedAudioFiles` writes result JSON and Markdown into a directory given by the caller. It no longer
   searches for a file — `FindFirst()` is gone along with the whole "first file wins" model.
 - `IProcessedAudioTranscriptionService` takes an explicit WAV path, reads it via `IAudioSampleReader` (NAudio: WAV only, downmix + resample to 16 kHz mono float in memory when needed), splits it into speech chunks with Silero VAD (`IVoiceActivityService`), runs Whisper on each chunk separately (timestamps shifted back to file time), saves `<transcripts>/<name>.json`. **No diarization** in this flow. Chunking is what stops Whisper repetition loops ("Субтитры делал…", one phrase repeated for a minute) from spreading; Chunking (`Vad:*`): speech regions are grouped at pauses into ~15–25 s chunks (`TargetChunkMin`/`TargetChunkMax`; a chunk under 15 s may grow to `MaxChunkDuration` = 30 s), each padded by `ChunkOverlap`/2 = 0.25 s per side. sherpa's `MaxSpeechDuration` is not a hard cap, so `SileroVoiceActivityService` cuts pause-less speech itself at the quietest 100 ms frame 15–25 s into the piece. Audio is Romanian with Russian words mixed in: `Whisper:Language` = `ro` + full `ggml-large-v3` gave by far the best result; `auto` misdetects per chunk (and then *translates* Romanian into Russian) and turbo loops more.
+- Whisper is built with `WithProbabilities()`. Words are assembled from tokens (a token starting with a
+  space opens a word; whisper.cpp special tokens `[_...]` are skipped), a word's probability is the minimum
+  over its tokens, and a word below `Whisper:LowConfidenceThreshold` (0.5) goes into the segment's
+  `lowConfidence` list as `{ at, word, p }`, `at` being the character offset in the segment text. A word
+  not found in the (trimmed, normalized) segment text is silently skipped. The offset is recomputed on
+  both merges — segments into a turn (`SpeakerAlignmentService`) and a turn into correction pieces
+  (`MedicalTermCorrector`) — and a turn whose text the correction changed gets an empty list, since the
+  offsets would point into text that no longer exists.
 - `IProcessedAudioDiarizationService` runs diarization only (no Whisper) on the given file and saves `<transcripts>/<name>.diarization.json` (segments with seconds + `mm:ss`).
 - `ISpeakerAlignmentService.Align` assigns each Whisper segment to the speaker whose turns overlap it most
   (nearest turn if none overlap) and merges consecutive same-speaker segments into turns. Alignment is per
@@ -156,13 +164,31 @@ missing.
 - `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
 - `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
 - Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the batch text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` per file. The Moldova list is labelled as "NOT errors, keep as written".
+- Each piece in the request carries `lowConfidence` (omitted when empty, to save tokens); the system prompt
+  tells the model to start with those words but treat them as a hint, not a restriction. `POST /audio/correctTranscript`
+  reads the same field from the file, so a re-run sees what the pipeline saw; files without it still work.
+- `Glossary/phonetic_confusions.txt` (`heard | correct | comment`) is the third glossary of `medical` only.
+  It is loaded and selected exactly like the others; `ProfileCatalog.HeadingFor` gives it its own heading
+  ("Known ASR mishearings ..."). It is filled by hand from `.medical_corrections.md` reports.
 - `CorrectionValidator` rejects changed numbers, translation (Cyrillic ratio change > 0.15, letters moving between Cyrillic and Latin ≥ 2 each way, or a changed Latin/Cyrillic word-run order), >30% length change and >25% edit distance.
+
+**Speakers and persons** (`HealthTech/Speakers/`):
+- `Persons` is filled by hand (seed in `schema.sql` or the `.db` file); `GET /persons` lists it for the UI.
+- `PUT /jobs/{id}/speakers` takes `[{ label, personId }]` and **replaces** the job's whole binding set in one
+  transaction. Every label must be a speaker of that job's `.speakers.json`, no label twice, every
+  `personId` must exist — otherwise 400 and nothing is saved. `[]` clears the bindings. No result yet → 404.
+- `GET /jobs/{id}/transcript` returns the turns with `displayName` (the doctor's name, or the label if
+  unbound) and the dialogue text rebuilt with those names. Names are substituted on the fly; transcript
+  files are never rewritten, so bindings can change any number of times without reprocessing.
+- All checks live in `SpeakerBindingService`; the repositories are Dapper over `IDbConnectionFactory`.
 
 **Controllers** (`HealthTech/Controllers/`, attribute-routed `[Route("[controller]")]`) — thin, delegate to services:
 - `FilesController` — `POST /files` (multipart: `file`) → `{ fileId, fileName, sizeBytes, format, durationSec }`.
 - `JobsController` — `POST /jobs` (JSON: `fileId`, `title`, `speakersCount`, `discussionType`) → the record
   card; `GET /jobs` (hides `Uploaded`); `GET /jobs/{id}` (card + status, currentStep, percent, error);
-  `GET /jobs/{id}/result` (the `.speakers.json` content).
+  `GET /jobs/{id}/result` (the `.speakers.json` content); `PUT /jobs/{id}/speakers` and
+  `GET /jobs/{id}/transcript` → `ISpeakerBindingService`.
+- `PersonsController` — `GET /persons`, the doctor directory for the binding dropdown.
 - `ProfilesController` — `GET /profiles` for the upload dropdown.
 - `AudioController` — `POST /audio/correctTranscript?jobId=&fileName=&profile=` → `ITranscriptCorrectionService`.
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
@@ -173,9 +199,9 @@ missing.
 
 ## Not built yet
 
-Planned in `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`, stages 5–7: per-word ASR
-confidence (`lowConfidence`) passed to the LLM, a phonetic-confusions list, and the doctor directory endpoint
-with manual speaker binding (`Persons`/`SpeakerBindings` tables already exist). Glossary content for the
-administrative and financial types is deliberately empty — the mechanism is there, the words are not.
+Deferred items are listed in section 15 of `docs/superpowers/specs/2026-09-26-transcription-workflow-design.md`.
+Glossary content for the administrative and financial types is deliberately empty — the mechanism is
+there, the words are not. The phonetic-confusions list holds only a handful of seed lines. There is no
+automatic speaker identification by voice and no create endpoint for `Persons`.
 
 No authentication: `UseAuthorization()` is called without any scheme, every endpoint is open.
