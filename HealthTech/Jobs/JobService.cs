@@ -97,10 +97,22 @@ namespace HealthTech.Jobs
 
             // ProfileKey у загруженного файла пустой: тип записи ещё не выбран, а столбец
             // NOT NULL, и поменять это в SQLite нечем.
-            await _jobs.InsertAsync(new Job(
-                fileId, safeName, "", JobStatus.Uploaded, null, 0, null, null,
-                DateTimeOffset.UtcNow, null,
-                sizeBytes, info.Format, info.DurationSeconds, null, null), cancellationToken);
+            try
+            {
+                await _jobs.InsertAsync(new Job(
+                    fileId, safeName, "", JobStatus.Uploaded, null, 0, null, null,
+                    DateTimeOffset.UtcNow, null,
+                    sizeBytes, info.Format, info.DurationSeconds, null, null), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Файл на диске есть, строки нет - и такого состояния не видно ни в GET /jobs,
+                // ни в будущей уборке по таблице. Это хуже брошенной строки в Uploaded: там
+                // хотя бы есть за что зацепиться. Убираем каталог, раз записи не будет.
+                TryDeleteDirectory(inputDirectory);
+                throw new AudioProcessingException(AudioProcessingError.FileSystemError,
+                    $"Не удалось создать запись о файле {fileId}: {ex.Message}", ex);
+            }
 
             _logger.LogInformation("Загружен файл {FileId} ({FileName}, {Format}, {Bytes} Б)",
                 fileId, safeName, info.Format, sizeBytes);
