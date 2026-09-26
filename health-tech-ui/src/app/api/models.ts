@@ -119,6 +119,11 @@ export interface MinutesVerification {
   summary: string;
   findings: VerificationFinding[];
   completed: boolean;
+  /**
+   * Findings the model reported but could not prove (quote not found in the transcript or the
+   * document); they are not returned. Above zero, `isConsistent` is false even with empty `findings`.
+   */
+  discardedFindings: number;
   isConsistent: boolean;
 }
 
