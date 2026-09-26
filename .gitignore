@@ -19,3 +19,6 @@ logs/
 
 # Local configuration
 appsettings.Development.json
+
+# Локальные базы (WorkflowCore и прикладная)
+/data/
