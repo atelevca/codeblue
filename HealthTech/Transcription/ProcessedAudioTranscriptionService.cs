@@ -66,10 +66,14 @@ namespace HealthTech.Transcription
                 }
                 var chunkSegments = await _speechRecognition.TranscribeAsync(chunkSamples, whisperPrompt, cancellationToken);
 
-                segments.AddRange(chunkSegments.Select(s => new TranscriptSegment(
-                    Math.Round(chunk.Start + s.Start, 2),
-                    Math.Round(Math.Min(chunk.Start + s.End, chunk.End), 2),
-                    s.Text)));
+                // "with", а не новый TranscriptSegment: пересборка потеряла бы список неуверенно
+                // распознанных слов. Смещения в нём остаются верными - текст сегмента не меняется,
+                // сдвигаются только временные метки.
+                segments.AddRange(chunkSegments.Select(s => s with
+                {
+                    Start = Math.Round(chunk.Start + s.Start, 2),
+                    End = Math.Round(Math.Min(chunk.Start + s.End, chunk.End), 2)
+                }));
 
                 done++;
                 progress?.Report(new UnitProgress(done, chunks.Count));

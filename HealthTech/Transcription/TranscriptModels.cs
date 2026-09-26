@@ -1,7 +1,16 @@
+using SemanticKernel.MedicalCorrection;
+
 namespace HealthTech.Transcription
 {
     /// <summary>A piece of recognized text. Times are in seconds from the start of the audio.</summary>
-    public record TranscriptSegment(double Start, double End, string Text);
+    public record TranscriptSegment(double Start, double End, string Text)
+    {
+        /// <summary>
+        /// Неуверенно распознанные слова со смещениями внутри <see cref="Text"/>.
+        /// Пустой список у сегментов, прочитанных из файлов, записанных до появления поля.
+        /// </summary>
+        public IReadOnlyList<LowConfidenceWord> LowConfidence { get; init; } = [];
+    }
 
     /// <summary>Сколько единиц работы выполнено из скольких. Для полосы прогресса внутри шага.</summary>
     public record UnitProgress(int Done, int Total);
@@ -26,7 +35,11 @@ namespace HealthTech.Transcription
         long DiarizationMs);
 
     /// <summary>A speaker turn with its text: consecutive transcript segments of one speaker merged together.</summary>
-    public record SpeakerTranscriptTurn(double Start, double End, string StartTime, string EndTime, string Speaker, string Text);
+    public record SpeakerTranscriptTurn(double Start, double End, string StartTime, string EndTime, string Speaker, string Text)
+    {
+        /// <summary>Неуверенно распознанные слова со смещениями внутри <see cref="Text"/> реплики.</summary>
+        public IReadOnlyList<LowConfidenceWord> LowConfidence { get; init; } = [];
+    }
 
     /// <summary>
     /// Transcript aligned with diarization. <see cref="Text"/> is the whole dialogue as
