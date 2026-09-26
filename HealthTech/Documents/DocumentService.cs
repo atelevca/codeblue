@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HealthTech.Audio;
+using HealthTech.Email;
 using HealthTech.Jobs;
 using HealthTech.Speakers;
 using SemanticKernel.Minutes;
@@ -9,7 +10,7 @@ namespace HealthTech.Documents;
 public sealed class DocumentService(
     IJobRepository jobs, IJobPaths paths, Lazy<IMeetingMinutesGenerator> generator,
     ISpeakerBindingService speakers, ISpeakerBindingRepository bindings, IPersonRepository persons,
-    IDocumentPdfRenderer pdf, ILogger<DocumentService> logger) : IDocumentService
+    IDocumentPdfRenderer pdf, IEmailSender email, ILogger<DocumentService> logger) : IDocumentService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     // Bounded lock set prevents concurrent saves for the same job without accumulating per-job locks.
@@ -146,6 +147,37 @@ public sealed class DocumentService(
         ct.ThrowIfCancellationRequested();
         return new DocumentDownload(content, $"proces-verbal-{jobId}.pdf");
     }
+
+    public async Task<SentEmail> SendEmailAsync(Guid jobId, SendEmailRequest? request, CancellationToken ct = default)
+    {
+        var to = (request?.To ?? [])
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (to.Count == 0)
+            throw new DocumentException(400, "Adăugați cel puțin un destinatar.");
+        if (to.Count > MaxRecipients)
+            throw new DocumentException(400, $"Cel mult {MaxRecipients} destinatari.");
+        var invalid = to.FirstOrDefault(x => !IsPlainAddress(x));
+        if (invalid != null)
+            throw new DocumentException(400, $"„{invalid}” nu este o adresă de e-mail validă.");
+
+        var subject = string.IsNullOrWhiteSpace(request?.Subject) ? "Proces-verbal" : request.Subject.Trim();
+        var body = string.IsNullOrWhiteSpace(request?.Body)
+            ? "Procesul-verbal al ședinței este atașat în format PDF."
+            : request.Body;
+
+        var pdf = await DownloadPdfAsync(jobId, ct);
+        await email.SendAsync(to, subject, body, new EmailAttachment(pdf.FileName, pdf.Content, "application/pdf"), ct);
+        return new SentEmail(to, subject, pdf.FileName);
+    }
+
+    private const int MaxRecipients = 20;
+
+    // Bare "user@host" only: no display names, lists or header tricks from the request.
+    private static bool IsPlainAddress(string value) =>
+        MimeKit.MailboxAddress.TryParse(value, out var mailbox) && mailbox.Address == value && value.Contains('@');
 
     private async Task<Job> RequireJobAsync(Guid jobId, CancellationToken ct) =>
         await jobs.GetAsync(jobId, ct) ?? throw new DocumentException(404, "Jobul nu a fost găsit.");

@@ -26,4 +26,10 @@ public sealed class DocumentController(IDocumentService documents) : ControllerB
         var result = await documents.DownloadPdfAsync(jobId, cancellationToken);
         return File(result.Content, "application/pdf", result.FileName);
     }
+
+    /// <summary>Sends the saved minutes as a PDF attachment through the local SMTP server (Mailpit).</summary>
+    [HttpPost("sendemail/{jobId:guid}")]
+    [RequestSizeLimit(512 * 1024)]
+    public Task<SentEmail> SendEmail(Guid jobId, SendEmailRequest? request, CancellationToken cancellationToken) =>
+        documents.SendEmailAsync(jobId, request, cancellationToken);
 }

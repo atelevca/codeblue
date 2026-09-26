@@ -34,6 +34,15 @@ HealthTech/run.sh                                       # macOS: same, profile "
 
 The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled**; on the Windows dev machine ffmpeg 9.0.2 is installed via winget (`Gyan.FFmpeg`), on macOS via `brew install ffmpeg`. macOS setup is in `docs/running-on-macos.md`. Paths come from config (`Audio:FfmpegPath`, `Audio:FfprobePath`, default: looked up on PATH). If they can't be started, the service throws `AudioProcessingError.FfmpegUnavailable` (HTTP 503 via the exception handler).
 
+## External dependency: Mailpit (local SMTP)
+
+"Trimite pe e-mail" sends the minutes PDF over plain SMTP to **Mailpit**, a mail catcher on this
+machine; the hackathon's security gate forbids any external SMTP (Gmail, SendGrid, ...). `docker compose
+up -d` at the repo root starts it (`docker-compose.yml`, image pinned, ports bound to `127.0.0.1`:
+SMTP 1025, web inbox http://localhost:8025, messages kept in a volume, update check against GitHub
+disabled). The API runs on the host, so `Email:Host` is `localhost`, not `mailpit`. For offline use,
+pull the image and restore NuGet (MailKit) while online. Mailpit down → `EmailException` → 503.
+
 ## External dependency: models
 
 Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `wespeaker_en_voxceleb_resnet34_LM.onnx` (speaker embeddings), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
@@ -227,7 +236,10 @@ embedded resources) in the page header, teal `#007C84` rules and headings, grey 
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
   `transcribeWithSpeakers`) are gone: with per-job folders "the first file in a shared directory" is meaningless.
 - `DocumentController` — `GET /document/get/{jobId}`, `POST /document/save/{jobId}` (no body: regenerate;
-  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`.
+  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`,
+  `POST /document/sendemail/{jobId}` (`{ to[], subject, body }` → the PDF attached, sent by
+  `SmtpEmailSender` in `HealthTech/Email/`: MailKit, no TLS/auth, new client per call, `Email:TimeoutSeconds`;
+  bare addresses only, ≤ 20; the body is never logged).
 - `MainController` (`GET /main/run`) is a template placeholder.
 
 `JobStatus` is serialized as a string (`"Running"`), not as an enum number.
