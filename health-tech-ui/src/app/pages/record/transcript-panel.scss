@@ -1,0 +1,62 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 15, 0.34);
+  z-index: 60;
+  animation: fade 0.18s ease-out;
+}
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 560px;
+  max-width: 100%;
+  background: #fff;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -24px 0 64px rgba(20, 20, 15, 0.18);
+  animation: slide 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+.panel__title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.panel__close {
+  width: 32px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 22px 32px;
+}
+.panel__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  padding: 24px 0;
+}
+@keyframes slide {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}

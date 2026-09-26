@@ -11,8 +11,16 @@ import { SpeakerMap, resolveLink } from '../../state/speaker-map';
 import { Toasts } from '../../state/toasts';
 import { EmailDialog } from './email-dialog';
 import { SpeakerPanel } from './speaker-panel';
+import { TranscriptLine, TranscriptPanel } from './transcript-panel';
 
 type DownloadState = 'idle' | 'preparing' | 'done';
+
+/** MoM language switch. UI only: the backend has no language parameter, nothing is regenerated. */
+const LANGS = [
+  { code: 'RO', label: 'Română' },
+  { code: 'RU', label: 'Русский' },
+  { code: 'EN', label: 'English' },
+];
 
 const KIND_LABELS: Record<FindingKind, string> = {
   Unsupported: 'Afirmație fără suport în transcriere',
@@ -22,7 +30,7 @@ const KIND_LABELS: Record<FindingKind, string> = {
 
 @Component({
   selector: 'app-mom-view',
-  imports: [RouterLink, SpeakerPanel, EmailDialog],
+  imports: [RouterLink, SpeakerPanel, EmailDialog, TranscriptPanel],
   templateUrl: './mom-view.html',
   styleUrl: './mom-view.scss',
 })
@@ -41,6 +49,8 @@ export class MomView implements OnInit {
   protected readonly emailOpen = signal(false);
   protected readonly mappingExpanded = signal(false);
   protected readonly transcriptOpen = signal(false);
+  protected readonly langs = LANGS;
+  protected readonly lang = signal('RO');
   private readonly now = signal(Date.now());
 
   protected readonly title = computed(() => jobTitle(this.record()));
@@ -77,7 +87,7 @@ export class MomView implements OnInit {
     Array.from({ length: this.speakerCount() }, (_, i) => speakerColor(i)),
   );
 
-  protected readonly turns = computed(() => {
+  protected readonly turns = computed((): TranscriptLine[] => {
     const r = this.result();
     if (!r) return [];
     const names = this.names();
