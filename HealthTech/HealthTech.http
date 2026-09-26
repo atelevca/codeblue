@@ -1,0 +1,30 @@
+@HealthTech_HostAddress = http://localhost:5089
+
+GET {{HealthTech_HostAddress}}/main/run
+Accept: application/json
+
+###
+
+GET {{HealthTech_HostAddress}}/audio/validateAndProcess
+Accept: application/json
+
+###
+
+# Diarization + Whisper large-v3 on CPU: expect this to take a long time for long recordings.
+POST {{HealthTech_HostAddress}}/audio/transcribeProcessed
+Accept: application/json
+
+###
+
+# Speaker diarization only (no Whisper): speaker turns "Speaker 1", "Speaker 2", ... saved to transcripts/<name>.diarization.json.
+POST {{HealthTech_HostAddress}}/audio/diarizeProcessed
+Accept: application/json
+
+###
+
+# Whisper + diarization, then each transcript segment is assigned to the speaker overlapping it most;
+# consecutive segments of one speaker are merged. Saved to transcripts/<name>.speakers.json.
+POST {{HealthTech_HostAddress}}/audio/transcribeWithSpeakers
+Accept: application/json
+
+###
