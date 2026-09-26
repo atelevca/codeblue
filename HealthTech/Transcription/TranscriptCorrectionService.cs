@@ -71,7 +71,7 @@ namespace HealthTech.Transcription
             _logger.LogInformation("Correcting medical terms in {Path}: {SegmentCount} segment(s)", path, segments.Count);
 
             var log = new CorrectionLog();
-            var corrected = await _corrector.CorrectAsync(segments, profile.Content, log, cancellationToken);
+            var corrected = await _corrector.CorrectAsync(segments, profile.Content, log, null, cancellationToken);
 
             for (var i = 0; i < items.Count; i++)
             {

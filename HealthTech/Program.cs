@@ -110,7 +110,14 @@ builder.Services.AddSingleton<IProfileCatalog, ProfileCatalog>();
 
 builder.Services.AddSingleton<IJobService, JobService>();
 builder.Services.AddSingleton<IJobProgress, JobProgress>();
-builder.Services.AddTransient<StubStep>();
+builder.Services.AddTransient<NormalizeAudioStep>();
+builder.Services.AddTransient<PrepareModelInputStep>();
+builder.Services.AddTransient<DetectSpeechChunksStep>();
+builder.Services.AddTransient<TranscribeStep>();
+builder.Services.AddTransient<DiarizeStep>();
+builder.Services.AddTransient<AlignSpeakersStep>();
+builder.Services.AddTransient<CorrectTermsStep>();
+builder.Services.AddTransient<SaveResultStep>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();

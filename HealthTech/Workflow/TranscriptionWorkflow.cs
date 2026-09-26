@@ -8,19 +8,49 @@ namespace HealthTech.Workflow
         public const string WorkflowId = "transcription";
 
         public string Id => WorkflowId;
-        public int Version => 1;
+
+        // Версия 1 — каркас на заглушках; определение изменилось, а старые инстансы
+        // остались в workflow.db, поэтому номер поднят.
+        public int Version => 2;
 
         public void Build(IWorkflowBuilder<TranscriptionJobData> builder)
         {
             builder
-                .StartWith<StubStep>()
-                    .Input(step => step.JobId, data => data.JobId)
-                    .Input(step => step.StepName, data => "Заглушка 1")
-                    .Input(step => step.Percent, data => 50)
-                .Then<StubStep>()
-                    .Input(step => step.JobId, data => data.JobId)
-                    .Input(step => step.StepName, data => "Заглушка 2")
-                    .Input(step => step.Percent, data => 100);
+                .StartWith<NormalizeAudioStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.SourcePath, d => d.SourcePath)
+                    .Output(d => d.NormalizedPath, s => s.NormalizedPath)
+                .Then<PrepareModelInputStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.NormalizedPath, d => d.NormalizedPath)
+                    .Output(d => d.Wav16kPath, s => s.Wav16kPath)
+                .Then<DetectSpeechChunksStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.Wav16kPath, d => d.Wav16kPath)
+                    .Output(d => d.Chunks, s => s.Chunks)
+                .Then<TranscribeStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.Wav16kPath, d => d.Wav16kPath)
+                    .Input(s => s.ProfileKey, d => d.ProfileKey)
+                    .Input(s => s.Chunks, d => d.Chunks)
+                    .Output(d => d.TranscriptPath, s => s.TranscriptPath)
+                .Then<DiarizeStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.Wav16kPath, d => d.Wav16kPath)
+                    .Output(d => d.DiarizationPath, s => s.DiarizationPath)
+                .Then<AlignSpeakersStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.TranscriptPath, d => d.TranscriptPath)
+                    .Input(s => s.DiarizationPath, d => d.DiarizationPath)
+                .Then<CorrectTermsStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.ProfileKey, d => d.ProfileKey)
+                    .Input(s => s.TranscriptPath, d => d.TranscriptPath)
+                .Then<SaveResultStep>()
+                    .Input(s => s.JobId, d => d.JobId)
+                    .Input(s => s.TranscriptPath, d => d.TranscriptPath)
+                    .Input(s => s.DiarizationPath, d => d.DiarizationPath)
+                    .Output(d => d.SpeakersPath, s => s.SpeakersPath);
         }
     }
 }

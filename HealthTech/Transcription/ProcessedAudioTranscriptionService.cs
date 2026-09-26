@@ -10,9 +10,10 @@ namespace HealthTech.Transcription
         /// No speaker diarization. The source file is left untouched.
         /// </summary>
         /// <param name="whisperPrompt">The record profile's steering phrase; empty falls back to config.</param>
+        /// <param name="progress">Reports finished chunks so the caller can move a progress bar inside the step.</param>
         Task<TranscriptionResult> TranscribeAsync(
             string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks, string whisperPrompt,
-            CancellationToken cancellationToken = default);
+            IProgress<UnitProgress>? progress = null, CancellationToken cancellationToken = default);
     }
 
     public class ProcessedAudioTranscriptionService : IProcessedAudioTranscriptionService
@@ -38,11 +39,12 @@ namespace HealthTech.Transcription
 
         public async Task<TranscriptionResult> TranscribeAsync(
             string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks, string whisperPrompt,
-            CancellationToken cancellationToken = default)
+            IProgress<UnitProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             const int sampleRate = AudioSampleReader.TargetSampleRate;
 
-            var fileName = Path.GetFileName(wavPath);
+            // Имя записи, а не производного <имя>.16k.wav, который читают модели.
+            var fileName = ProcessedAudioFiles.BaseName(wavPath) + Path.GetExtension(wavPath);
             var samples = await _sampleReader.ReadMono16kAsync(wavPath, cancellationToken);
             var durationSeconds = Math.Round((double)samples.Length / sampleRate, 2);
             _logger.LogInformation("Transcribing {FileName}, duration {DurationSeconds:F1} s", fileName, durationSeconds);
@@ -51,6 +53,7 @@ namespace HealthTech.Transcription
 
             // Each chunk is transcribed on its own; Whisper's timestamps are shifted back to file time.
             var segments = new List<TranscriptSegment>();
+            var done = 0;
             foreach (var chunk in chunks)
             {
                 var from = (int)(chunk.Start * sampleRate);
@@ -67,6 +70,9 @@ namespace HealthTech.Transcription
                     Math.Round(chunk.Start + s.Start, 2),
                     Math.Round(Math.Min(chunk.Start + s.End, chunk.End), 2),
                     s.Text)));
+
+                done++;
+                progress?.Report(new UnitProgress(done, chunks.Count));
             }
 
             var transcriptionMs = stopwatch.ElapsedMilliseconds;

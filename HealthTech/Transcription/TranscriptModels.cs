@@ -3,6 +3,9 @@ namespace HealthTech.Transcription
     /// <summary>A piece of recognized text. Times are in seconds from the start of the audio.</summary>
     public record TranscriptSegment(double Start, double End, string Text);
 
+    /// <summary>Сколько единиц работы выполнено из скольких. Для полосы прогресса внутри шага.</summary>
+    public record UnitProgress(int Done, int Total);
+
     /// <summary>A time range attributed to one speaker. Times are in seconds from the start of the audio.</summary>
     public record SpeakerSegment(double Start, double End, string Speaker);
 
@@ -38,7 +41,7 @@ namespace HealthTech.Transcription
         long TranscriptionMs,
         long DiarizationMs);
 
-    internal static class TranscriptDialogue
+    public static class TranscriptDialogue
     {
         // "Speaker 1:" / text / blank line / "Speaker 2:" / text ...
         public static string Format(IEnumerable<(string Speaker, string Text)> turns) =>
