@@ -87,14 +87,22 @@ missing.
   the speaker count itself. Values outside 1..20 are a 400.
 - Upload limits are raised to `Uploads:MaxBytes` (1 GB) on both Kestrel and the multipart form; the
   Kestrel default of 30 MB is smaller than a real recording.
-- `TranscriptionWorkflow` runs eight steps, each a `JobStep`: normalize (5%) → prepare 16 kHz mono (10%)
-  → VAD (15%) → transcribe (55%) → diarize (75%) → align (78%) → correct terms (98%) → save (100%).
-  The number in brackets is the accumulated percent written to `Jobs.Percent`.
+- `TranscriptionWorkflow` (version 3) runs nine steps, each a `JobStep`: normalize (5%) → prepare 16 kHz
+  mono (10%) → VAD (15%) → transcribe (55%) → diarize (75%) → align (78%) → correct terms (90%) → save
+  (92%) → generate minutes (100%). The number in brackets is the accumulated percent written to
+  `Jobs.Percent`. The version is bumped whenever the step chain changes, because old instances stay in
+  `workflow.db`.
 - Data crossing a step boundary is serialized into `workflow.db`, so `TranscriptionJobData` holds only
   paths, ids and the chunk list. The turns produced by alignment travel through `turns.json` in the job's
-  transcripts folder instead, and the last step deletes it.
-- The two slow steps report progress inside their own band, so the bar keeps moving:
-  `"Распознавание: чанк 3 из 7"` (15–55%) and `"Коррекция терминов: батч 2 из 5"` (78–98%).
+  transcripts folder instead, and the save step deletes it.
+- The three slow steps report progress inside their own band, so the bar keeps moving:
+  `"Распознавание: чанк 3 из 7"` (15–55%), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
+  `"Генерация протокола: ..."` by phase — extracting facts (92%), writing the document (94%), checking it
+  against the transcript (98%).
+- `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
+  `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes.
+  A minutes failure is logged as a warning and the job still completes: the transcript is the result,
+  the minutes are derived from it and can be regenerated with `POST /document/save/{jobId}`.
 - A failing step puts the job in `Failed` with the message and lets the chain run out; later steps see
   `Failed` and do nothing. There is no automatic retry — the steps are far too expensive for one.
 - `JobStep` checks `Failed` **before** its first progress report, and `UpdateProgressAsync` only raises
@@ -184,6 +192,12 @@ missing.
   files are never rewritten, so bindings can change any number of times without reprocessing.
 - All checks live in `SpeakerBindingService`; the repositories are Dapper over `IDbConnectionFactory`.
 
+**Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
+from the speakers transcript, writes the minutes, and a verification pass checks them against the
+transcript. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
+PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
+Linux (`Documents:FontDirectory` overrides). Details and the editor contract are in `HealthTech/Documents/README.md`.
+
 **Controllers** (`HealthTech/Controllers/`, attribute-routed `[Route("[controller]")]`) — thin, delegate to services:
 - `FilesController` — `POST /files` (multipart: `file`) → `{ fileId, fileName, sizeBytes, format, durationSec }`.
 - `JobsController` — `POST /jobs` (JSON: `fileId`, `title`, `speakersCount`, `discussionType`) → the record
@@ -195,6 +209,8 @@ missing.
 - `AudioController` — `POST /audio/correctTranscript?jobId=&fileName=&profile=` → `ITranscriptCorrectionService`.
   The four old endpoints (`validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
   `transcribeWithSpeakers`) are gone: with per-job folders "the first file in a shared directory" is meaningless.
+- `DocumentController` — `GET /document/get/{jobId}`, `POST /document/save/{jobId}` (no body: regenerate;
+  `{ delta }`: verify and save an edit), `GET /document/downloadpdf/{jobId}`.
 - `MainController` (`GET /main/run`) is a template placeholder.
 
 `JobStatus` is serialized as a string (`"Running"`), not as an enum number.
