@@ -53,9 +53,13 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
             footer.AddText(" / ");
             footer.AddNumPagesField();
 
-            var status = section.AddParagraph(saved.Verification.IsConsistent
-                ? "Verificare automată: fără discrepanțe raportate."
-                : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe - necesită revizuire.");
+            // Несостоявшаяся сверка - это не "расхождений нет": в PDF она должна быть
+            // видна отдельной строкой, иначе непроверенный документ выглядит проверенным.
+            var status = section.AddParagraph(!saved.Verification.Completed
+                ? "Verificare automată: nefinalizată - documentul necesită revizuire manuală."
+                : saved.Verification.IsConsistent
+                    ? "Verificare automată: fără discrepanțe raportate."
+                    : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe - necesită revizuire.");
             status.Format.Font.Size = 8;
             status.Format.Font.Color = Colors.Gray;
             AddDelta(section, saved.Delta);

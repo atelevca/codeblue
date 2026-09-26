@@ -7,7 +7,7 @@ namespace HealthTech.Documents;
 
 public sealed class DocumentService(
     IJobRepository jobs, IJobPaths paths, Lazy<IMeetingMinutesGenerator> generator,
-    IDocumentPdfRenderer pdf) : IDocumentService
+    IDocumentPdfRenderer pdf, ILogger<DocumentService> logger) : IDocumentService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     // Bounded lock set prevents concurrent saves for the same job without accumulating per-job locks.
@@ -56,7 +56,7 @@ public sealed class DocumentService(
                     delta = request.Delta;
                     markdown = editedMarkdown!;
                 }
-                verification = await generator.Value.VerifyMinutesAsync(transcript, markdown, ct);
+                verification = await VerifyOrNoteAsync(transcript, markdown, ct);
             }
             catch (ArgumentException ex)
             {
@@ -83,6 +83,33 @@ public sealed class DocumentService(
         finally
         {
             gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Сверка - контроль качества, а не условие сохранения. Она требует от модели дословных
+    /// цитат из транскрипта, и на искажённом распознавании 7B в четырёхбитном кванте их не
+    /// выдаёт: цитата перефразируется или теряет диакритику и не находится подстрокой.
+    /// Ронять запрос из-за этого значит выбросить уже готовый документ после десяти минут
+    /// счёта. Документ сохраняется как есть, а несостоявшаяся сверка помечается явно.
+    /// </summary>
+    private async Task<MinutesVerification> VerifyOrNoteAsync(
+        string transcript, string markdown, CancellationToken ct)
+    {
+        try
+        {
+            return await generator.Value.VerifyMinutesAsync(transcript, markdown, ct);
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or ArgumentException or DocumentException))
+        {
+            logger.LogWarning(ex, "Сверка протокола не удалась; документ сохранён без неё");
+            return new MinutesVerification
+            {
+                Completed = false,
+                Summary = "Verificarea automată nu a putut fi finalizată. " +
+                          "Documentul este salvat așa cum a fost generat și necesită revizuire manuală.",
+                Findings = []
+            };
         }
     }
 
