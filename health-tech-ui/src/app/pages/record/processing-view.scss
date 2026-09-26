@@ -106,6 +106,17 @@ h1 {
   padding-top: 2px;
   color: var(--text-4);
 }
+.stage__sync {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-ink);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .stage.done .stage__icon {
   background: var(--accent);
   border-color: var(--accent);

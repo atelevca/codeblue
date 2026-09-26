@@ -41,6 +41,15 @@ builder.Services.AddControllers().AddJsonOptions(options =>
         new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 
+// UI (Angular dev server на :4200) живёт на другом origin. Список origin-ов - из конфигурации (Cors:AllowedOrigins).
+const string UiCorsPolicy = "Ui";
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy(UiCorsPolicy, policy => policy
+    .WithOrigins(corsOrigins)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .WithExposedHeaders("Content-Disposition")));
+
 builder.Services.Configure<AudioOptions>(builder.Configuration.GetSection(AudioOptions.SectionName));
 builder.Services.AddSingleton<IAudioProcessor, AudioProcessor>();
 builder.Services.AddSingleton<IJobPaths, JobPaths>();
@@ -181,6 +190,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "HealthTech v1"));
 }
+
+// До UseHttpsRedirection: preflight OPTIONS должен получить ответ здесь, а не редирект.
+app.UseCors(UiCorsPolicy);
 
 app.UseHttpsRedirection();
 

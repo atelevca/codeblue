@@ -97,11 +97,9 @@ export class ProcessingView {
 
   protected readonly stages = computed(() => {
     const idx = this.stageIndex(),
-      failed = this.failed(),
-      p = this.record().percent;
+      failed = this.failed();
     return STAGES.map((st, i) => {
       const state = i < idx ? 'done' : i === idx ? (failed ? 'failed' : 'active') : 'todo';
-      const within = Math.floor(((p - st.from) / (st.to - st.from)) * 100);
       return {
         name: st.name,
         desc: st.desc,
@@ -112,7 +110,7 @@ export class ProcessingView {
             : state === 'failed'
               ? 'Eșuat'
               : state === 'active'
-                ? `${Math.max(0, Math.min(100, within))}%`
+                ? ''
                 : 'În așteptare',
       };
     });
