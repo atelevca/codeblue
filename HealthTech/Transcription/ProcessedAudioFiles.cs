@@ -2,29 +2,22 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using HealthTech.Audio;
-using Microsoft.Extensions.Options;
 
 namespace HealthTech.Transcription
 {
     public interface IProcessedAudioFiles
     {
-        /// <summary>Returns the first audio file (by name) in the processed directory.</summary>
-        string FindFirst();
+        /// <summary>Saves <paramref name="result"/> as <c>&lt;outputDirectory&gt;/&lt;source name&gt;&lt;suffix&gt;</c> and returns the path.</summary>
+        Task<string> SaveJsonAsync<T>(T result, string outputDirectory, string sourcePath, string suffix,
+            CancellationToken cancellationToken = default);
 
-        /// <summary>Saves <paramref name="result"/> as <c>&lt;transcripts&gt;/&lt;source name&gt;&lt;suffix&gt;</c> and returns the path.</summary>
-        Task<string> SaveJsonAsync<T>(T result, string sourcePath, string suffix, CancellationToken cancellationToken = default);
-
-        /// <summary>Saves <paramref name="text"/> as <c>&lt;transcripts&gt;/&lt;source name&gt;&lt;suffix&gt;</c> (UTF-8) and returns the path.</summary>
-        Task<string> SaveTextAsync(string text, string sourcePath, string suffix, CancellationToken cancellationToken = default);
+        /// <summary>Saves <paramref name="text"/> as <c>&lt;outputDirectory&gt;/&lt;source name&gt;&lt;suffix&gt;</c> (UTF-8) and returns the path.</summary>
+        Task<string> SaveTextAsync(string text, string outputDirectory, string sourcePath, string suffix,
+            CancellationToken cancellationToken = default);
     }
 
     public class ProcessedAudioFiles : IProcessedAudioFiles
     {
-        private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".wav", ".mp3", ".m4a", ".ogg", ".flac"
-        };
-
         // Readable file on disk: indented, and Cyrillic kept as-is instead of \uXXXX escapes.
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -32,53 +25,42 @@ namespace HealthTech.Transcription
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
-        private readonly IAudioProcessor _audioProcessor;
-        private readonly TranscriptsOptions _transcriptsOptions;
         private readonly ILogger<ProcessedAudioFiles> _logger;
 
-        public ProcessedAudioFiles(
-            IAudioProcessor audioProcessor,
-            IOptions<TranscriptsOptions> transcriptsOptions,
-            ILogger<ProcessedAudioFiles> logger)
+        public ProcessedAudioFiles(ILogger<ProcessedAudioFiles> logger)
         {
-            _audioProcessor = audioProcessor;
-            _transcriptsOptions = transcriptsOptions.Value;
             _logger = logger;
         }
 
-        public string FindFirst()
-        {
-            var directory = _audioProcessor.OutputDirectory;
-            if (!Directory.Exists(directory))
-            {
-                throw new AudioProcessingException(AudioProcessingError.InputNotFound,
-                    $"Processed directory '{directory}' does not exist. Run GET /audio/validateAndProcess first.");
-            }
-
-            return Directory.EnumerateFiles(directory)
-                       .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
-                       .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
-                       .FirstOrDefault()
-                   ?? throw new AudioProcessingException(AudioProcessingError.InputNotFound,
-                       $"No audio files ({string.Join(", ", AudioExtensions)}) found in '{directory}'. Run GET /audio/validateAndProcess first.");
-        }
-
-        public Task<string> SaveJsonAsync<T>(T result, string sourcePath, string suffix, CancellationToken cancellationToken = default) =>
-            SaveAsync(sourcePath, suffix,
+        public Task<string> SaveJsonAsync<T>(T result, string outputDirectory, string sourcePath, string suffix,
+            CancellationToken cancellationToken = default) =>
+            SaveAsync(outputDirectory, sourcePath, suffix,
                 async stream => await JsonSerializer.SerializeAsync(stream, result, JsonOptions, cancellationToken));
 
-        public Task<string> SaveTextAsync(string text, string sourcePath, string suffix, CancellationToken cancellationToken = default) =>
-            SaveAsync(sourcePath, suffix,
+        public Task<string> SaveTextAsync(string text, string outputDirectory, string sourcePath, string suffix,
+            CancellationToken cancellationToken = default) =>
+            SaveAsync(outputDirectory, sourcePath, suffix,
                 async stream => await stream.WriteAsync(Encoding.UTF8.GetBytes(text), cancellationToken));
 
-        private async Task<string> SaveAsync(string sourcePath, string suffix, Func<Stream, Task> write)
+        /// <summary>
+        /// Имя артефакта по пути к аудио. Модели читают производный <c>&lt;имя&gt;.16k.wav</c>, и этот
+        /// суффикс отбрасывается — иначе всё выходило бы как "&lt;имя&gt;.16k.speakers.json".
+        /// </summary>
+        public static string BaseName(string sourcePath)
         {
-            var outputFolder = _transcriptsOptions.OutputFolder;
-            var outputPath = Path.Combine(outputFolder, Path.GetFileNameWithoutExtension(sourcePath) + suffix);
+            var name = Path.GetFileNameWithoutExtension(sourcePath);
+            return name.EndsWith(AudioProcessor.ModelInputSuffix, StringComparison.OrdinalIgnoreCase)
+                ? name[..^AudioProcessor.ModelInputSuffix.Length]
+                : name;
+        }
+
+        private async Task<string> SaveAsync(string outputDirectory, string sourcePath, string suffix, Func<Stream, Task> write)
+        {
+            var outputPath = Path.Combine(outputDirectory, BaseName(sourcePath) + suffix);
 
             try
             {
-                Directory.CreateDirectory(outputFolder);
+                Directory.CreateDirectory(outputDirectory);
                 await using var stream = File.Create(outputPath);
                 await write(stream);
             }

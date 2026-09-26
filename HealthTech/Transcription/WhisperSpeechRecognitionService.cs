@@ -1,5 +1,6 @@
 using HealthTech.Audio;
 using Microsoft.Extensions.Options;
+using SemanticKernel.MedicalCorrection;
 using Whisper.net;
 using Whisper.net.LibraryLoader;
 using Whisper.net.Logger;
@@ -8,8 +9,11 @@ namespace HealthTech.Transcription
 {
     public interface ISpeechRecognitionService
     {
-        /// <summary>Transcribes 16 kHz mono float samples in [-1, 1].</summary>
-        Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Transcribes 16 kHz mono float samples in [-1, 1]. <paramref name="prompt"/> is the record
+        /// profile's steering phrase; an empty string means no initial prompt.
+        /// </summary>
+        Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, string prompt, CancellationToken cancellationToken = default);
     }
 
     // Singleton: the ggml large-v3 model is ~3 GB, so the factory (which holds it) is loaded once and reused.
@@ -64,18 +68,23 @@ namespace HealthTech.Transcription
                 RuntimeOptions.LoadedLibrary, _options.UseGpu, _options.GpuDevice);
         }
 
-        public async Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, CancellationToken cancellationToken = default)
+        public async Task<List<TranscriptSegment>> TranscribeAsync(
+            float[] samples, string prompt, CancellationToken cancellationToken = default)
         {
             await _gate.WaitAsync(cancellationToken);
             try
             {
                 var builder = _factory.CreateBuilder()
                     .WithLanguage(_options.Language)
+                    .WithProbabilities()
                     .WithThreads(Environment.ProcessorCount);
 
-                if (!string.IsNullOrWhiteSpace(_options.Prompt))
+                // Профиль записи задаёт свою фразу; Whisper:Prompt остаётся запасным значением
+                // для профилей, у которых WhisperPrompt пуст.
+                var initialPrompt = string.IsNullOrWhiteSpace(prompt) ? _options.Prompt : prompt;
+                if (!string.IsNullOrWhiteSpace(initialPrompt))
                 {
-                    builder.WithPrompt(_options.Prompt);
+                    builder.WithPrompt(initialPrompt);
                 }
                 if (_options.BeamSize > 1)
                 {
@@ -94,7 +103,10 @@ namespace HealthTech.Transcription
                     var text = segment.Text.Trim();
                     if (text.Length > 0)
                     {
-                        segments.Add(new TranscriptSegment(segment.Start.TotalSeconds, segment.End.TotalSeconds, text));
+                        segments.Add(new TranscriptSegment(segment.Start.TotalSeconds, segment.End.TotalSeconds, text)
+                        {
+                            LowConfidence = LowConfidenceWords(segment, text, _options.LowConfidenceThreshold)
+                        });
                     }
                 }
 
@@ -108,6 +120,75 @@ namespace HealthTech.Transcription
             {
                 _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// Собирает слова из подсловных токенов и возвращает те, чья вероятность ниже порога.
+        /// Вероятность слова - минимум по его токенам: для пометки подозрительных мест нужен
+        /// консервативный агрегат, среднее прячет один плохой кусок внутри длинного слова.
+        /// </summary>
+        private static List<LowConfidenceWord> LowConfidenceWords(SegmentData segment, string text, double threshold)
+        {
+            if (segment.Tokens is not { Length: > 0 })
+            {
+                return [];
+            }
+
+            var words = new List<(string Word, double P)>();
+            var current = "";
+            var probability = 1.0;
+
+            foreach (var token in segment.Tokens)
+            {
+                // Служебные токены whisper.cpp ([_BEG_], [_TT_123] и прочие) в тексте не появляются.
+                var piece = token.Text;
+                if (string.IsNullOrEmpty(piece) || piece.StartsWith("[_", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // Токен, начинающийся с пробела, открывает новое слово; остальные приклеиваются.
+                if (piece.StartsWith(' ') && current.Length > 0)
+                {
+                    words.Add((current, probability));
+                    current = "";
+                    probability = 1.0;
+                }
+
+                current += piece.TrimStart();
+                probability = Math.Min(probability, token.Probability);
+            }
+            if (current.Length > 0)
+            {
+                words.Add((current, probability));
+            }
+
+            // Смещения ищутся по тексту от курсора, а не считаются по токенам: segment.Text
+            // тримится и может не совпасть со склейкой токенов посимвольно, а поиск от курсора
+            // к такому расхождению устойчив. Не найденное слово просто пропускается.
+            var result = new List<LowConfidenceWord>();
+            var cursor = 0;
+            foreach (var (word, p) in words)
+            {
+                var trimmed = word.Trim();
+                if (trimmed.Length == 0)
+                {
+                    continue;
+                }
+
+                var at = text.IndexOf(trimmed, cursor, StringComparison.Ordinal);
+                if (at < 0)
+                {
+                    continue;
+                }
+                cursor = at + trimmed.Length;
+
+                if (p < threshold)
+                {
+                    result.Add(new LowConfidenceWord(at, trimmed, Math.Round(p, 3)));
+                }
+            }
+            return result;
         }
 
         public void Dispose()

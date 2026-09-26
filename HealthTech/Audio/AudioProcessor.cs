@@ -8,44 +8,51 @@ namespace HealthTech.Audio
 {
     public interface IAudioProcessor
     {
-        /// <summary>Absolute path of the configured input directory.</summary>
-        string InputDirectory { get; }
-
-        /// <summary>Absolute path of the configured output (processed) directory.</summary>
-        string OutputDirectory { get; }
-
         /// <summary>
         /// Validates that <paramref name="inputPath"/> contains an audio stream and writes a WAV copy of it
-        /// to the configured output directory. Relative paths are resolved against the configured input directory.
+        /// to <paramref name="outputDirectory"/>. Sample rate and channels are preserved as in the original.
         /// </summary>
-        Task<ProcessedAudio> ProcessAudioAsync(string inputPath, CancellationToken cancellationToken = default);
+        Task<ProcessedAudio> ProcessAudioAsync(string inputPath, string outputDirectory, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Writes <c>&lt;name&gt;.16k.wav</c> next to <paramref name="wavPath"/> — 16 kHz mono, the input
+        /// expected by Whisper, sherpa and the VAD. Returns its path; the source WAV is left untouched.
+        /// </summary>
+        Task<string> PrepareModelInputAsync(string wavPath, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Разбирает файл через ffprobe и возвращает контейнер и длительность, ничего не конвертируя
+        /// и ничего не записывая. Нужен на загрузке: UI показывает карточку файла до того,
+        /// как пользователь оформит запись и начнётся обработка.
+        /// </summary>
+        Task<AudioFileInfo> InspectAsync(string inputPath, CancellationToken cancellationToken = default);
     }
 
     public class AudioProcessor : IAudioProcessor
     {
+        /// <summary>
+        /// Suffix of the derived 16 kHz mono file, inserted before the extension. Artifact names are
+        /// derived from the recording, not from this file, so consumers strip it — see
+        /// <c>ProcessedAudioFiles</c>.
+        /// </summary>
+        public const string ModelInputSuffix = ".16k";
+
         private readonly AudioOptions _options;
-        private readonly string _inputDirectory;
-        private readonly string _outputDirectory;
         private readonly ILogger<AudioProcessor> _logger;
 
         private static readonly StringComparison PathComparison =
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-        public AudioProcessor(IOptions<AudioOptions> options, IHostEnvironment environment, ILogger<AudioProcessor> logger)
+        public AudioProcessor(IOptions<AudioOptions> options, ILogger<AudioProcessor> logger)
         {
             _options = options.Value;
-            _inputDirectory = Path.GetFullPath(_options.InputDirectory, environment.ContentRootPath);
-            _outputDirectory = Path.GetFullPath(_options.OutputDirectory, environment.ContentRootPath);
             _logger = logger;
         }
 
-        public string InputDirectory => _inputDirectory;
-
-        public string OutputDirectory => _outputDirectory;
-
-        public async Task<ProcessedAudio> ProcessAudioAsync(string inputPath, CancellationToken cancellationToken = default)
+        public async Task<ProcessedAudio> ProcessAudioAsync(
+            string inputPath, string outputDirectory, CancellationToken cancellationToken = default)
         {
-            var fullInputPath = Path.GetFullPath(inputPath, _inputDirectory);
+            var fullInputPath = Path.GetFullPath(inputPath);
             _logger.LogInformation("Processing audio file {InputPath}", fullInputPath);
 
             if (!File.Exists(fullInputPath))
@@ -58,7 +65,7 @@ namespace HealthTech.Audio
                 "Detected format {Format}, codec {Codec}, sample rate {SampleRate} Hz, {Channels} channel(s), sample format {SampleFormat}",
                 probe.Format, probe.Codec, probe.SampleRate, probe.Channels, probe.SampleFormat);
 
-            var wavPath = Path.Combine(_outputDirectory, Path.GetFileNameWithoutExtension(fullInputPath) + ".wav");
+            var wavPath = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(fullInputPath) + ".wav");
             var isPcmWav = probe.Format == "wav" && probe.Codec.StartsWith("pcm_", StringComparison.Ordinal);
             var sameFile = string.Equals(fullInputPath, wavPath, PathComparison);
 
@@ -70,7 +77,7 @@ namespace HealthTech.Audio
 
             try
             {
-                Directory.CreateDirectory(_outputDirectory);
+                Directory.CreateDirectory(outputDirectory);
 
                 if (isPcmWav)
                 {
@@ -93,6 +100,56 @@ namespace HealthTech.Audio
 
             return new ProcessedAudio(fullInputPath, wavPath, probe.Format, probe.Codec, probe.SampleRate, probe.Channels,
                 Converted: !isPcmWav);
+        }
+
+        public async Task<AudioFileInfo> InspectAsync(string inputPath, CancellationToken cancellationToken = default)
+        {
+            var fullInputPath = Path.GetFullPath(inputPath);
+            if (!File.Exists(fullInputPath))
+            {
+                throw new AudioProcessingException(AudioProcessingError.InputNotFound, $"Input file '{fullInputPath}' does not exist.");
+            }
+
+            var probe = await ProbeAsync(fullInputPath, cancellationToken);
+            _logger.LogInformation("Inspected {InputPath}: format {Format}, duration {Duration} s",
+                fullInputPath, probe.Format, probe.DurationSeconds);
+            return new AudioFileInfo(probe.Format, probe.DurationSeconds);
+        }
+
+        public async Task<string> PrepareModelInputAsync(string wavPath, CancellationToken cancellationToken = default)
+        {
+            var targetPath = Path.Combine(
+                Path.GetDirectoryName(wavPath)!,
+                Path.GetFileNameWithoutExtension(wavPath) + ModelInputSuffix + ".wav");
+            var tempPath = targetPath + ".partial";
+
+            _logger.LogInformation("Preparing model input {TargetPath} (16 kHz mono)", targetPath);
+            try
+            {
+                // -ar/-ac are set on purpose here: this is a derived file for the models, while the
+                // full-quality WAV next to it keeps the original sample rate and channel count.
+                var result = await RunAsync(_options.FfmpegPath,
+                    ["-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                     "-i", wavPath,
+                     "-map", "0:a:0", "-vn", "-sn", "-dn",
+                     "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                     "-f", "wav", tempPath],
+                    cancellationToken);
+
+                if (result.ExitCode != 0)
+                {
+                    throw new AudioProcessingException(AudioProcessingError.ConversionFailed,
+                        $"FFmpeg failed to downsample '{wavPath}' (exit code {result.ExitCode}): {result.StdErr.Trim()}");
+                }
+
+                File.Move(tempPath, targetPath, overwrite: true);
+            }
+            finally
+            {
+                TryDelete(tempPath);
+            }
+
+            return targetPath;
         }
 
         private async Task<AudioProbe> ProbeAsync(string path, CancellationToken cancellationToken)
@@ -138,9 +195,18 @@ namespace HealthTech.Audio
             }
 
             // format_name can be a list of aliases, e.g. "mov,mp4,m4a,3gp,3g2,mj2".
-            var format = root.TryGetProperty("format", out var f) ? GetString(f, "format_name") ?? "unknown" : "unknown";
+            var format = "unknown";
+            double? duration = null;
+            if (root.TryGetProperty("format", out var f))
+            {
+                format = GetString(f, "format_name") ?? "unknown";
+                duration = GetSeconds(f, "duration");
+            }
 
-            return new AudioProbe(format, codec, sampleRate.Value, channels.Value,
+            // Не каждый контейнер пишет длительность в format: у сырых потоков её берут из самого потока.
+            duration ??= GetSeconds(a, "duration");
+
+            return new AudioProbe(format, duration, codec, sampleRate.Value, channels.Value,
                 GetString(a, "sample_fmt"), GetInt(a, "bits_per_raw_sample"));
         }
 
@@ -254,6 +320,14 @@ namespace HealthTech.Audio
         private static string? GetString(JsonElement element, string name) =>
             element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
+        // ffprobe отдаёт длительность строкой вида "123.456000" и всегда с точкой, поэтому разбор
+        // строго инвариантный: на ru-RU культуре Parse принял бы точку за разделитель групп.
+        private static double? GetSeconds(JsonElement element, string name) =>
+            double.TryParse(GetString(element, name), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            && value > 0
+                ? value
+                : null;
+
         // ffprobe reports some numbers as strings (e.g. "sample_rate": "44100").
         private static int? GetInt(JsonElement element, string name)
         {
@@ -271,7 +345,7 @@ namespace HealthTech.Audio
                 : null;
         }
 
-        private record AudioProbe(string Format, string Codec, int SampleRate, int Channels, string? SampleFormat, int? BitsPerRawSample);
+        private record AudioProbe(string Format, double? DurationSeconds, string Codec, int SampleRate, int Channels, string? SampleFormat, int? BitsPerRawSample);
 
         private record ProcessResult(int ExitCode, string StdOut, string StdErr);
     }

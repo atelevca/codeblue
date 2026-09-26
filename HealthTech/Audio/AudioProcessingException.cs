@@ -9,7 +9,14 @@ namespace HealthTech.Audio
         ConversionFailed,
         FileSystemError,
         ModelFailed,
-        InvalidTranscript
+        InvalidTranscript,
+        UnknownProfile,
+
+        /// <summary>По этому файлу запись уже оформлена.</summary>
+        RecordAlreadyCreated,
+
+        /// <summary>Поле запроса не проходит проверку.</summary>
+        InvalidRequest
     }
 
     public class AudioProcessingException : Exception
