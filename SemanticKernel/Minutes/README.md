@@ -39,10 +39,15 @@ bool consistent = verification.IsConsistent;
    (`Unsupported`, `Omission`, `Contradiction`, `Misattribution`), fiecare cu secțiunea
    documentului (`section`, opțional), citate exacte și corectări sugerate. Citatele sunt
    verificate în cod: `transcriptQuote` trebuie să apară în transcript sau într-o valoare
-   din metadate, `documentQuote` în document. `IsConsistent` este adevărat numai când lista
-   discrepanțelor este goală. Discrepanțele sunt returnate pentru revizuire; documentul nu
-   este rescris automat. Verificarea separată este disponibilă prin
-   `VerifyMinutesAsync(transcript, markdown, metadata)`.
+   din metadate, `documentQuote` în document. Compararea tolerează spațiile, majusculele,
+   ş/ș, ţ/ț, ghilimelele tipografice și punctuația de la capete; citatul returnat este
+   fragmentul exact din sursă. Răspunsul ca întreg (`summary` + `findings`) trebuie să fie
+   valid, altfel etapa se reia; o constatare individuală al cărei citat nu se regăsește
+   sau căreia îi lipsește un câmp obligatoriu este eliminată și numărată în
+   `DiscardedFindings`, fără a anula restul verificării. `IsConsistent` este adevărat numai
+   când nu există discrepanțe și nicio constatare eliminată. Discrepanțele sunt returnate
+   pentru revizuire; documentul nu este rescris automat. Verificarea separată este
+   disponibilă prin `VerifyMinutesAsync(transcript, markdown, metadata)`.
 
 Toate etapele produc text în română, cu excepția citatelor păstrate în limba sursei. Responsabilul și termenul necunoscute sunt
 `Nespecificat`; nu se propun valori. Etapele pot fi apelate separat prin

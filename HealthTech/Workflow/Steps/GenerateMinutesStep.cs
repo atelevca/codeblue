@@ -44,7 +44,7 @@ namespace HealthTech.Workflow.Steps
                     "Задание {JobId}: протокол сохранён (сверка: {Verification})",
                     JobId,
                     document.Verification.Completed
-                        ? $"{document.Verification.Findings.Count} расхождений"
+                        ? $"{document.Verification.Findings.Count} расхождений, {document.Verification.DiscardedFindings} отброшено"
                         : "не выполнена");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

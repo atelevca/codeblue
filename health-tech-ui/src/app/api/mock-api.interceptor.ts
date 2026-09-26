@@ -287,6 +287,7 @@ function buildDocument(j: Job, edited?: QuillDelta): SavedDocument {
         },
       ],
       completed: true,
+      discardedFindings: 0,
       isConsistent: false,
     },
     savedAt: new Date().toISOString(),
