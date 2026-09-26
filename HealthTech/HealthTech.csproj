@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.89" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="NAudio.Core" Version="3.1.0" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
@@ -21,6 +23,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SemanticKernel\SemanticKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Data\schema.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ProjectExtensions><VisualStudio><UserProperties appsettings_1development_1json__JsonSchema="https://www.schemastore.org/asmdef.json" /></VisualStudio></ProjectExtensions>

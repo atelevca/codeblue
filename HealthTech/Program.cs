@@ -1,4 +1,6 @@
 using HealthTech.Audio;
+using HealthTech.Data;
+using HealthTech.Jobs;
 using HealthTech.Transcription;
 using Microsoft.Extensions.Options;
 using SemanticKernel;
@@ -70,11 +72,30 @@ builder.Services.AddSingleton<ITranscriptCorrectionService, TranscriptCorrection
 // The GGUF model is checked when the speaker transcript service is first used, not at startup.
 builder.Services.AddMedicalTermCorrection(builder.Configuration);
 
+// Прикладная база (Dapper). Путь относительный — резолвится от content root, как остальные.
+var appDatabasePath = Path.GetFullPath(
+    builder.Configuration["Database:AppDatabasePath"] ?? "../data/healthtech.db",
+    builder.Environment.ContentRootPath);
+builder.Services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(appDatabasePath));
+builder.Services.AddSingleton<DatabaseInitializer>();
+builder.Services.AddSingleton<IJobRepository, JobRepository>();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<AudioProcessingExceptionHandler>();
 builder.Services.AddExceptionHandler<LlmModelNotFoundExceptionHandler>();
 
 var app = builder.Build();
+
+app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
+
+// После перезапуска инстансы WorkflowCore поднимутся сами, но строки Jobs остались бы
+// в Running навсегда. Честнее пометить их упавшими, чем показывать вечную обработку.
+var orphaned = await app.Services.GetRequiredService<IJobRepository>()
+    .FailRunningAsync("Приложение было перезапущено во время обработки.");
+if (orphaned > 0)
+{
+    app.Logger.LogWarning("Помечено как Failed после перезапуска: {Count} задани(й)", orphaned);
+}
 
 app.UseExceptionHandler();
 
