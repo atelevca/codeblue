@@ -25,6 +25,7 @@ dotnet run --project HealthTech --launch-profile http   # serves http://localhos
   returned `fileId` to `/jobs` with the record card.
 - **Do NOT create any tests** — no test projects, test files, or test code. This is a project rule.
 - **No logic in controllers.** Controllers only take the request, call a service, and return its result. Validation, loops, branching, error collection, and try/catch belong in services (e.g. `HealthTech/Audio/`). Map domain exceptions to HTTP responses in an `IExceptionHandler`, not in the controller. This is a project rule.
+- CORS: policy `Ui` allows the origins in `Cors:AllowedOrigins` (default `http://localhost:4200` — the Angular dev server); `UseCors` sits before `UseHttpsRedirection` so preflights aren't redirected.
 - OpenAPI document is mapped only in Development (`/openapi/v1.json`); Swagger UI is at `/swagger`.
 - Git repository, default branch `master`.
 
