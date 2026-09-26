@@ -9,8 +9,9 @@ namespace SemanticKernel.MedicalCorrection
         /// </summary>
         /// <param name="profile">System prompt and glossaries of the selected record type.</param>
         /// <param name="log">Receives every accepted or rejected change, e.g. for <see cref="CorrectionLog.ToMarkdown"/>.</param>
+        /// <param name="progress">Reports finished batches so the caller can move a progress bar inside the step.</param>
         Task<IReadOnlyList<Segment>> CorrectAsync(
             IReadOnlyList<Segment> segments, RecordProfileContent profile, CorrectionLog log,
-            CancellationToken ct = default);
+            IProgress<BatchProgress>? progress = null, CancellationToken ct = default);
     }
 }

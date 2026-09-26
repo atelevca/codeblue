@@ -42,9 +42,11 @@ namespace HealthTech.Transcription
             SaveAsync(outputDirectory, sourcePath, suffix,
                 async stream => await stream.WriteAsync(Encoding.UTF8.GetBytes(text), cancellationToken));
 
-        // Artifacts are named after the recording. The models read the derived <name>.16k.wav, so that
-        // suffix is dropped here — otherwise every artifact would come out as "<name>.16k.speakers.json".
-        private static string BaseName(string sourcePath)
+        /// <summary>
+        /// Имя артефакта по пути к аудио. Модели читают производный <c>&lt;имя&gt;.16k.wav</c>, и этот
+        /// суффикс отбрасывается — иначе всё выходило бы как "&lt;имя&gt;.16k.speakers.json".
+        /// </summary>
+        public static string BaseName(string sourcePath)
         {
             var name = Path.GetFileNameWithoutExtension(sourcePath);
             return name.EndsWith(AudioProcessor.ModelInputSuffix, StringComparison.OrdinalIgnoreCase)

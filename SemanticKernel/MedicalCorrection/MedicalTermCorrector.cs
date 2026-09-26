@@ -41,7 +41,8 @@ namespace SemanticKernel.MedicalCorrection
         private record Piece(int Id, int SegmentIndex, Segment Segment, string Leading, string Text, string Trailing);
 
         public async Task<IReadOnlyList<Segment>> CorrectAsync(
-            IReadOnlyList<Segment> segments, RecordProfileContent profile, CorrectionLog log, CancellationToken ct = default)
+            IReadOnlyList<Segment> segments, RecordProfileContent profile, CorrectionLog log,
+            IProgress<BatchProgress>? progress = null, CancellationToken ct = default)
         {
             var pieces = SplitIntoPieces(segments);
             if (pieces.Count == 0)
@@ -73,6 +74,7 @@ namespace SemanticKernel.MedicalCorrection
 
                     _logger.LogInformation("Medical correction batch {Batch}/{BatchCount} ({PieceCount} piece(s)) took {Seconds:F1} s",
                         i + 1, batches.Count, batch.Count, stopwatch.Elapsed.TotalSeconds);
+                    progress?.Report(new BatchProgress(i + 1, batches.Count));
                 }
 
                 _logger.LogInformation("Medical correction: {Accepted} change(s) accepted, {Rejected} rejected in {SegmentCount} segment(s) / {PieceCount} piece(s)",

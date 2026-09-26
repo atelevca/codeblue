@@ -34,7 +34,8 @@ namespace HealthTech.Transcription
         public async Task<DiarizationResult> DiarizeAsync(
             string wavPath, string outputDirectory, CancellationToken cancellationToken = default)
         {
-            var fileName = Path.GetFileName(wavPath);
+            // Имя записи, а не производного <имя>.16k.wav, который читают модели.
+            var fileName = ProcessedAudioFiles.BaseName(wavPath) + Path.GetExtension(wavPath);
 
             var samples = await _sampleReader.ReadMono16kAsync(wavPath, cancellationToken);
             var durationSeconds = Math.Round((double)samples.Length / AudioSampleReader.TargetSampleRate, 2);
