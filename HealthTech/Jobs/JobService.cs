@@ -5,13 +5,16 @@ using WorkflowCore.Interface;
 
 namespace HealthTech.Jobs
 {
+    /// <summary>Ответ на загрузку файла. FileId - это же и идентификатор будущего задания.</summary>
+    public record UploadedFile(Guid FileId, string FileName, long SizeBytes, string Format, double DurationSec);
+
     public interface IJobService
     {
         /// <summary>
-        /// Сохраняет загруженный файл в каталог нового задания, создаёт запись и запускает
-        /// обработку. Возвращает идентификатор задания сразу, не дожидаясь конца обработки.
+        /// Сохраняет загруженный файл в каталог нового задания, разбирает его ffprobe и создаёт
+        /// строку в статусе Uploaded. Обработку не запускает - это делает оформление записи.
         /// </summary>
-        Task<Guid> CreateAsync(Stream content, string fileName, string profileKey, CancellationToken cancellationToken = default);
+        Task<UploadedFile> UploadAsync(Stream content, string fileName, CancellationToken cancellationToken = default);
 
         Task<Job?> GetAsync(Guid id, CancellationToken cancellationToken = default);
         Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default);
@@ -25,31 +28,32 @@ namespace HealthTech.Jobs
         private readonly IJobRepository _jobs;
         private readonly IJobPaths _paths;
         private readonly IProfileCatalog _profiles;
+        private readonly IAudioProcessor _audio;
         private readonly IWorkflowHost _workflow;
         private readonly ILogger<JobService> _logger;
 
         public JobService(
-            IJobRepository jobs, IJobPaths paths, IProfileCatalog profiles,
+            IJobRepository jobs, IJobPaths paths, IProfileCatalog profiles, IAudioProcessor audio,
             IWorkflowHost workflow, ILogger<JobService> logger)
         {
             _jobs = jobs;
             _paths = paths;
             _profiles = profiles;
+            _audio = audio;
             _workflow = workflow;
             _logger = logger;
         }
 
-        public async Task<Guid> CreateAsync(
-            Stream content, string fileName, string profileKey, CancellationToken cancellationToken = default)
+        public async Task<UploadedFile> UploadAsync(
+            Stream content, string fileName, CancellationToken cancellationToken = default)
         {
-            // Бросает UnknownProfile -> 400 до того, как что-либо будет записано на диск.
-            var profile = _profiles.Get(profileKey);
-
-            var jobId = Guid.NewGuid();
+            var fileId = Guid.NewGuid();
             var safeName = SafeFileName.Sanitize(fileName);
-            var inputDirectory = _paths.InputDirectory(jobId);
+            var inputDirectory = _paths.InputDirectory(fileId);
             var sourcePath = Path.Combine(inputDirectory, safeName);
 
+            long sizeBytes;
+            AudioFileInfo info;
             try
             {
                 Directory.CreateDirectory(inputDirectory);
@@ -58,17 +62,20 @@ namespace HealthTech.Jobs
                     await content.CopyToAsync(file, cancellationToken);
                 }
 
-                // Пустой файл отбивается сразу, до создания задания: клиенту нечего опрашивать,
-                // а 422 честнее, чем задание, которое гарантированно упадёт на первом же шаге.
-                if (new FileInfo(sourcePath).Length == 0)
+                sizeBytes = new FileInfo(sourcePath).Length;
+                if (sizeBytes == 0)
                 {
                     throw new AudioProcessingException(AudioProcessingError.NotAudio, "Загруженный файл пуст.");
                 }
+
+                // ffprobe здесь, а не на первом шаге конвейера: битый файл отбивается 422-м
+                // прямо на загрузке, а не падением задания через минуту обработки.
+                info = await _audio.InspectAsync(sourcePath, cancellationToken);
             }
             catch (Exception ex)
             {
-                // Каталог задания уже создан, а задания не будет - убираем за собой,
-                // иначе каждая отбитая загрузка оставляет пустую папку.
+                // Каталог уже создан, а строки не будет - убираем за собой, иначе каждая
+                // отбитая загрузка оставляет мусорную папку.
                 TryDeleteDirectory(inputDirectory);
                 throw ex is AudioProcessingException
                     ? ex
@@ -76,37 +83,19 @@ namespace HealthTech.Jobs
                         $"Не удалось сохранить загруженный файл в '{sourcePath}': {ex.Message}", ex);
             }
 
+            // ProfileKey у загруженного файла пустой: тип записи ещё не выбран, а столбец
+            // NOT NULL, и поменять это в SQLite нечем.
             await _jobs.InsertAsync(new Job(
-                jobId, safeName, profile.Key, JobStatus.Pending, null, 0, null, null,
+                fileId, safeName, "", JobStatus.Uploaded, null, 0, null, null,
                 DateTimeOffset.UtcNow, null,
-                0, null, null, null, null), cancellationToken);
+                sizeBytes, info.Format, info.DurationSeconds, null, null), cancellationToken);
 
-            string workflowId;
-            try
-            {
-                workflowId = await _workflow.StartWorkflow(TranscriptionWorkflow.WorkflowId, new TranscriptionJobData
-                {
-                    JobId = jobId,
-                    ProfileKey = profile.Key,
-                    SourcePath = sourcePath
-                });
-            }
-            catch (Exception ex)
-            {
-                // Строка уже создана. Без этого задание навсегда осталось бы в Pending с нулевым
-                // прогрессом и пустой ошибкой, и клиент опрашивал бы его до следующего перезапуска.
-                _logger.LogError(ex, "Задание {JobId}: не удалось запустить workflow", jobId);
-                await _jobs.UpdateStatusAsync(jobId, JobStatus.Failed,
-                    $"Не удалось запустить обработку: {ex.Message}", cancellationToken);
-                throw new AudioProcessingException(AudioProcessingError.FileSystemError,
-                    $"Не удалось запустить обработку задания {jobId}: {ex.Message}", ex);
-            }
+            _logger.LogInformation("Загружен файл {FileId} ({FileName}, {Format}, {Bytes} Б)",
+                fileId, safeName, info.Format, sizeBytes);
 
-            await _jobs.SetWorkflowIdAsync(jobId, workflowId, cancellationToken);
-
-            _logger.LogInformation("Создано задание {JobId} ({FileName}, профиль {Profile}), workflow {WorkflowId}",
-                jobId, safeName, profile.Key, workflowId);
-            return jobId;
+            // Длительность в ответе не nullable: UI показывает её в карточке, и ноль там
+            // честнее, чем пустое место. Контейнеры без длительности встречаются редко.
+            return new UploadedFile(fileId, safeName, sizeBytes, info.Format, info.DurationSeconds ?? 0);
         }
 
         private void TryDeleteDirectory(string directory)
