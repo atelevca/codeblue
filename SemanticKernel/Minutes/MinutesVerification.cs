@@ -13,8 +13,15 @@ public sealed record MinutesVerification
     /// </summary>
     public bool Completed { get; init; } = true;
 
+    /// <summary>
+    /// Находки, отброшенные при проверке: цитата не нашлась в источнике даже после
+    /// нормализации пробелов, регистра и диакритики, либо не хватало обязательных полей.
+    /// Модель что-то нашла, но доказать не смогла, поэтому такой документ не считается сверенным.
+    /// </summary>
+    public int DiscardedFindings { get; init; }
+
     /// <summary>No discrepancies were reported by the model; not a guarantee of factual correctness.</summary>
-    public bool IsConsistent => Completed && Findings.Count == 0;
+    public bool IsConsistent => Completed && Findings.Count == 0 && DiscardedFindings == 0;
 }
 
 public sealed record MinutesDiscrepancy

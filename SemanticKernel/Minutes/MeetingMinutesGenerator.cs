@@ -1,5 +1,7 @@
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using LLamaSharp.SemanticKernel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -50,39 +52,145 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         EnsureLength(input, _options.MaxVerificationCharacters, "verification input");
         // Verify the final rendered document against the source, not against potentially incomplete extracted facts.
         return RunStageAsync("Minutes Verification", "minutes_verification.system.txt", input,
-            _options.VerificationMaxTokens, response =>
-            {
-                var verification = JsonSerializer.Deserialize<MinutesVerification>(UnwrapFence(response), JsonOptions)
-                    ?? throw new JsonException("Expected a verification object.");
-                if (string.IsNullOrWhiteSpace(verification.Summary) || verification.Findings == null)
-                {
-                    throw new FormatException("Verification must contain summary and findings.");
-                }
-                foreach (var finding in verification.Findings)
-                {
-                    if (finding == null || string.IsNullOrWhiteSpace(finding.Description) ||
-                        string.IsNullOrWhiteSpace(finding.SuggestedCorrection) ||
-                        finding.Kind is not ("Unsupported" or "Omission" or "Contradiction"))
-                    {
-                        throw new FormatException("Invalid verification finding.");
-                    }
-                    ValidateQuote(finding.TranscriptQuote, transcript, finding.Kind != "Unsupported");
-                    ValidateQuote(finding.DocumentQuote, minutesMarkdown, finding.Kind != "Omission");
-                }
-                return verification;
-            }, ct);
+            _options.VerificationMaxTokens, response => ParseVerification(response, transcript, minutesMarkdown), ct);
     }
 
-    private static void ValidateQuote(string? quote, string source, bool required)
+    // Ответ в целом (summary + массив findings) обязан быть корректным, иначе повтор. Отдельная
+    // находка с неточной цитатой или без обязательного поля отбрасывается сама: раньше одна такая
+    // находка роняла всю сверку, и на длинных записях она не проходила ни разу.
+    private MinutesVerification ParseVerification(string response, string transcript, string minutesMarkdown)
     {
-        if (quote == null && !required)
+        var root = JsonNode.Parse(UnwrapFence(response)) as JsonObject
+            ?? throw new JsonException("Expected a verification object.");
+        var summary = ReadString(root, "summary");
+        if (string.IsNullOrWhiteSpace(summary) || root["findings"] is not JsonArray items)
         {
-            return;
+            throw new FormatException("Verification must contain summary and findings.");
         }
-        if (string.IsNullOrWhiteSpace(quote) || !source.Contains(quote, StringComparison.Ordinal))
+
+        var findings = new List<MinutesDiscrepancy>();
+        var discarded = 0;
+        foreach (var item in items)
         {
-            throw new FormatException("Verification evidence must be an exact quotation from the supplied source.");
+            var finding = item is JsonObject obj ? ReadFinding(obj, transcript, minutesMarkdown) : null;
+            if (finding == null)
+            {
+                discarded++;
+                continue;
+            }
+            findings.Add(finding);
         }
+
+        if (discarded > 0)
+        {
+            // Число, а не содержимое: в находках цитаты из транскрипта.
+            _logger.LogWarning("MOM stage Minutes Verification: {Discarded} of {Total} finding(s) discarded, evidence not found in the source",
+                discarded, items.Count);
+            summary += $" {discarded} constatări au fost eliminate: citatele nu au putut fi regăsite în text.";
+        }
+        return new MinutesVerification { Summary = summary, Findings = findings, DiscardedFindings = discarded };
+    }
+
+    private static MinutesDiscrepancy? ReadFinding(JsonObject item, string transcript, string minutesMarkdown)
+    {
+        var kind = ReadString(item, "kind");
+        var description = ReadString(item, "description");
+        var suggestedCorrection = ReadString(item, "suggestedCorrection");
+        if (kind is not ("Unsupported" or "Omission" or "Contradiction") ||
+            string.IsNullOrWhiteSpace(description) || string.IsNullOrWhiteSpace(suggestedCorrection))
+        {
+            return null;
+        }
+
+        if (!TryResolveQuote(ReadString(item, "transcriptQuote"), transcript, kind != "Unsupported", out var transcriptQuote) ||
+            !TryResolveQuote(ReadString(item, "documentQuote"), minutesMarkdown, kind != "Omission", out var documentQuote))
+        {
+            return null;
+        }
+
+        return new MinutesDiscrepancy
+        {
+            Kind = kind,
+            Description = description,
+            TranscriptQuote = transcriptQuote,
+            DocumentQuote = documentQuote,
+            SuggestedCorrection = suggestedCorrection
+        };
+    }
+
+    private static string? ReadString(JsonObject item, string name) =>
+        item[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+    /// <summary>
+    /// Находит цитату в источнике и возвращает точный фрагмент источника. Сравнение прощает то,
+    /// что модель меняет при переписывании: пробелы, регистр, ş/ș и ţ/ț, типографские кавычки,
+    /// тире и многоточия по краям. Возвращается фрагмент источника, а не текст модели, так что
+    /// цитата в ответе остаётся точной и её можно подсветить.
+    /// </summary>
+    private static bool TryResolveQuote(string? quote, string source, bool required, out string? resolved)
+    {
+        resolved = null;
+        if (string.IsNullOrWhiteSpace(quote))
+        {
+            return !required;
+        }
+
+        var trimmed = quote.Trim().Trim('.', '…', '"', '\'', '„', '“', '”', '«', '»', ' ');
+        if (trimmed.Length == 0)
+        {
+            return !required;
+        }
+
+        var (normalizedSource, map) = NormalizeForMatch(source);
+        var (normalizedQuote, _) = NormalizeForMatch(trimmed);
+        var at = normalizedSource.IndexOf(normalizedQuote, StringComparison.Ordinal);
+        if (normalizedQuote.Length == 0 || at < 0)
+        {
+            return false;
+        }
+
+        var start = map[at];
+        var end = map[at + normalizedQuote.Length - 1] + 1;
+        resolved = source[start..end];
+        return true;
+    }
+
+    // Нормализованный текст и для каждого его символа - индекс в исходной строке.
+    private static (string Text, List<int> Map) NormalizeForMatch(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        var map = new List<int>(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (char.IsWhiteSpace(c))
+            {
+                if (builder.Length > 0 && builder[^1] != ' ')
+                {
+                    builder.Append(' ');
+                    map.Add(i);
+                }
+                continue;
+            }
+
+            builder.Append(char.ToLowerInvariant(c) switch
+            {
+                'ş' => 'ș',
+                'ţ' => 'ț',
+                '„' or '“' or '”' or '«' or '»' => '"',
+                '‘' or '’' => '\'',
+                '–' or '—' => '-',
+                var other => other
+            });
+            map.Add(i);
+        }
+
+        if (builder.Length > 0 && builder[^1] == ' ')
+        {
+            builder.Length--;
+            map.RemoveAt(map.Count - 1);
+        }
+        return (builder.ToString(), map);
     }
 
     public async Task<MeetingFacts> ExtractFactsAsync(string transcript, CancellationToken ct = default)
@@ -173,7 +281,7 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
             {
                 lastError = ex;
                 // Do not log transcript, facts or model output: these can contain patient data.
-                _logger.LogWarning("MOM stage {Stage} returned invalid output on attempt {Attempt}", stage, attempt + 1);
+                _logger.LogWarning("MOM stage {Stage} returned invalid output on attempt {Attempt}: {Reason}", stage, attempt + 1, ex.Message);
             }
         }
         throw new InvalidOperationException($"MOM stage '{stage}' failed after {_options.MaxRetries + 1} attempts.", lastError);
