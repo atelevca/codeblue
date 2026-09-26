@@ -34,6 +34,13 @@ namespace HealthTech.Speakers
         public async Task<NamedTranscript> BindAsync(
             Guid jobId, IReadOnlyList<SpeakerBinding> bindings, CancellationToken cancellationToken = default)
         {
+            // [null] или элемент без метки иначе упал бы в 500 на первом обращении к Label.
+            if (bindings.Any(b => b is null || string.IsNullOrWhiteSpace(b.Label)))
+            {
+                throw new AudioProcessingException(AudioProcessingError.InvalidRequest,
+                    "Каждая привязка должна содержать label и personId.");
+            }
+
             var result = await ReadResultAsync(jobId, cancellationToken);
 
             // Метка не из этой записи - почти всегда опечатка в UI, и молча принять её значит

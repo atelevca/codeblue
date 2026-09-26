@@ -35,8 +35,10 @@ namespace HealthTech.Speakers
             }
 
             using var connection = _connections.Create();
+            // Id сравнивается без учёта регистра: справочник правится руками, и GUID, вписанный
+            // заглавными буквами, иначе не нашёлся бы. Guid.ToString() всегда даёт строчные.
             var found = await connection.QueryAsync<string>(
-                "SELECT Id FROM Persons WHERE Id IN @Ids",
+                "SELECT Id FROM Persons WHERE lower(Id) IN @Ids",
                 new { Ids = ids.Select(i => i.ToString()).ToArray() });
             return found.Select(Guid.Parse).ToList();
         }
