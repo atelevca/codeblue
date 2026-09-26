@@ -1,4 +1,4 @@
-# Resona — API contract
+# CodeBlue — API contract
 
 12 backend methods. Speakers (`getSpeakers`), voice samples, speaker suggestions and the people directory live on the frontend (mocks and stubs), so they are not API calls.
 

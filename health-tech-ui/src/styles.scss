@@ -1,4 +1,4 @@
-// Resona — global styles, ported from the "Resona v2" design.
+// CodeBlue — global styles, ported from the "CodeBlue v2" design.
 // Styles live here rather than in components to stay under the per-component style budget.
 
 :root {
@@ -305,6 +305,13 @@ a {
     color: oklch(0.45 0.09 196);
     .dot {
       background: var(--accent);
+    }
+  }
+  &--completed {
+    background: oklch(0.96 0.035 155);
+    color: oklch(0.42 0.11 155);
+    .dot {
+      background: oklch(0.6 0.13 155);
     }
   }
   &--failed {
@@ -813,5 +820,222 @@ a {
     margin-top: 3px;
     line-height: 1.55;
     color: var(--text-2);
+  }
+}
+
+// ---- Istoric (history page) -------------------------------------------------
+
+.hist {
+  &__head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  &__lead {
+    margin: 6px 0 0;
+    color: var(--text-2);
+    font-size: 15px;
+    text-wrap: pretty;
+  }
+  &__bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+
+    .seg {
+      border-radius: 10px;
+      button {
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 7px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+    }
+  }
+  &__count {
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  &__search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    width: 260px;
+    max-width: 100%;
+    color: var(--text-3);
+    cursor: text;
+
+    input {
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 13px;
+      flex: 1;
+      min-width: 0;
+      color: var(--text);
+    }
+  }
+  &__table {
+    margin-top: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    overflow-x: auto;
+  }
+  &__inner {
+    min-width: 760px;
+  }
+  &__row {
+    display: grid;
+    grid-template-columns: minmax(0, 2.6fr) 1.3fr 0.8fr 0.8fr 1.3fr 96px;
+    gap: 16px;
+    padding: 14px 20px;
+    align-items: center;
+    border-bottom: 1px solid var(--line-faint);
+    cursor: pointer;
+    transition: background 0.12s;
+    &:hover {
+      background: #fafaf8;
+    }
+    &:last-child {
+      border-bottom: none;
+    }
+    &--head {
+      padding: 10px 20px;
+      font-size: 12px;
+      color: var(--text-3);
+      border-bottom: 1px solid var(--line-soft);
+      cursor: default;
+      &:hover {
+        background: transparent;
+      }
+    }
+  }
+  &__name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  &__icon,
+  &__empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    i {
+      width: 2px;
+      border-radius: 1px;
+      background: var(--text-3);
+    }
+  }
+  &__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #f3f2ef;
+    gap: 2px;
+    i:nth-child(1) {
+      height: 6px;
+    }
+    i:nth-child(2) {
+      height: 12px;
+    }
+    i:nth-child(3) {
+      height: 8px;
+    }
+    i:nth-child(4) {
+      height: 10px;
+    }
+  }
+  &__sub {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  &__cell {
+    color: var(--text-2);
+    font-size: 13px;
+  }
+  &__spk {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: -2px;
+    border: 1.5px solid #fff;
+    box-sizing: content-box;
+  }
+  &__state {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+    .badge {
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 11px;
+    }
+  }
+  &__action {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 12px;
+  }
+  &__none {
+    padding: 56px 20px;
+    text-align: center;
+    color: var(--text-3);
+  }
+  &__empty {
+    margin-top: 28px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 16px;
+    padding: 80px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  &__empty-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    gap: 3px;
+    i {
+      background: #c9c7c1;
+    }
+    i:nth-child(1) {
+      height: 8px;
+    }
+    i:nth-child(2) {
+      height: 16px;
+    }
+    i:nth-child(3) {
+      height: 11px;
+    }
+    i:nth-child(4) {
+      height: 6px;
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FindingKind, Job, TranscriptResult } from '../../api/models';
-import { ResonaApi, toApiError } from '../../api/resona-api';
+import { CodeBlueApi, toApiError } from '../../api/codeblue-api';
 import { speakerColor, typeInfo } from '../../shared/catalog';
 import { fmtDate, fmtDur, fmtLongDate } from '../../shared/format';
 import { deltaLines, deltaText } from '../../shared/quill';
@@ -27,7 +27,7 @@ const KIND_LABELS: Record<FindingKind, string> = {
   styleUrl: './mom-view.scss',
 })
 export class MomView implements OnInit {
-  private readonly api = inject(ResonaApi);
+  private readonly api = inject(CodeBlueApi);
   private readonly toasts = inject(Toasts);
   private readonly speakerMap = inject(SpeakerMap);
   private readonly minutes = inject(MinutesStore);

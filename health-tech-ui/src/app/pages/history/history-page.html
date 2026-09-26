@@ -1,0 +1,124 @@
+<div class="hist">
+  <div class="hist__head">
+    <div>
+      <h1 class="page-title">Istoric</h1>
+      <p class="hist__lead">Toate înregistrările încărcate, de la cea mai recentă.</p>
+    </div>
+    <a class="btn btn--primary btn--lg" routerLink="/new">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <path d="M8 3v10M3 8h10"></path></svg
+      >Înregistrare nouă
+    </a>
+  </div>
+
+  @if (loadError(); as err) {
+    <div class="alert-error" style="margin-top: 28px">
+      <div class="alert-error__icon">!</div>
+      <div style="flex: 1">
+        <div class="alert-error__title">Lista nu a putut fi încărcată</div>
+        <div class="alert-error__msg">{{ err }}</div>
+      </div>
+    </div>
+  }
+
+  @if (tracker.all().length) {
+    <div class="hist__bar">
+      <div class="seg">
+        @for (f of filters(); track f.key) {
+          <button [class.on]="filter() === f.key" (click)="filter.set(f.key)">
+            {{ f.label }}<span class="mono hist__count">{{ f.count }}</span>
+          </button>
+        }
+      </div>
+      <label class="hist__search">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        >
+          <circle cx="6" cy="6" r="4"></circle>
+          <path d="M9 9l3 3"></path>
+        </svg>
+        <input
+          [value]="search()"
+          (input)="search.set($any($event.target).value)"
+          placeholder="Caută înregistrări"
+        />
+      </label>
+    </div>
+
+    <div class="hist__table">
+      <div class="hist__inner">
+        <div class="hist__row hist__row--head">
+          <span>Înregistrare</span><span>Încărcat la</span><span>Durată</span><span>Vorbitori</span
+          ><span>Stare</span><span></span>
+        </div>
+        @for (r of rows(); track r.job.id) {
+          <div class="hist__row" (click)="open(r.job)">
+            <div class="hist__name">
+              <div class="hist__icon"><i></i><i></i><i></i><i></i></div>
+              <div style="min-width: 0">
+                <div class="ellipsis" style="font-weight: 500">{{ r.name }}</div>
+                <div class="ellipsis hist__sub">{{ r.sub }}</div>
+              </div>
+            </div>
+            <span class="hist__cell">{{ r.date }}</span>
+            <span class="hist__cell mono">{{ r.dur }}</span>
+            <span class="hist__cell hist__spk">
+              <span style="display: flex">
+                @for (c of r.dots; track $index) {
+                  <span class="hist__dot" [style.background]="c"></span>
+                }
+              </span>
+              <span style="margin-left: 4px">{{ r.job.speakersCount ?? '—' }}</span>
+            </span>
+            <div class="hist__state">
+              <span class="badge badge--{{ r.badge.cls }}">
+                <span class="dot" [class.pulse]="r.job.status === 'Running'"></span>
+                {{ r.badge.label }}
+                @if (r.job.status === 'Running') {
+                  · {{ r.job.percent }}%
+                }
+              </span>
+              @if (r.job.status === 'Running') {
+                <div class="bar" style="width: 100px">
+                  <div [style.width.%]="r.job.percent"></div>
+                </div>
+              }
+            </div>
+            <div style="display: flex; justify-content: flex-end">
+              <button class="btn hist__action" (click)="$event.stopPropagation(); open(r.job)">
+                {{ r.action }}
+              </button>
+            </div>
+          </div>
+        } @empty {
+          <div class="hist__none">Nicio înregistrare nu corespunde acestui filtru.</div>
+        }
+      </div>
+    </div>
+  } @else if (!loading() && !loadError()) {
+    <div class="hist__empty">
+      <div class="hist__empty-icon"><i></i><i></i><i></i><i></i></div>
+      <div style="margin-top: 18px; font-size: 16px; font-weight: 500">Nicio înregistrare încă</div>
+      <div class="hist__lead" style="margin-top: 4px; max-width: 340px; font-size: 14px">
+        Încărcați primul fișier audio, iar procesele-verbale generate vor apărea aici.
+      </div>
+      <a class="btn btn--dark btn--lg" style="margin-top: 20px" routerLink="/new"
+        >Încarcă o înregistrare</a
+      >
+    </div>
+  }
+</div>
