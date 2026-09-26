@@ -3,6 +3,7 @@ using HealthTech.Data;
 using HealthTech.Documents;
 using HealthTech.Jobs;
 using HealthTech.Profiles;
+using HealthTech.Speakers;
 using HealthTech.Transcription;
 using HealthTech.Workflow;
 using HealthTech.Workflow.Steps;
@@ -116,6 +117,9 @@ builder.Services.Configure<ProfileOptions>(builder.Configuration.GetSection(Prof
 builder.Services.AddSingleton<IProfileCatalog, ProfileCatalog>();
 
 builder.Services.AddSingleton<IJobService, JobService>();
+builder.Services.AddSingleton<IPersonRepository, PersonRepository>();
+builder.Services.AddSingleton<ISpeakerBindingRepository, SpeakerBindingRepository>();
+builder.Services.AddSingleton<ISpeakerBindingService, SpeakerBindingService>();
 builder.Services.AddSingleton<IJobProgress, JobProgress>();
 builder.Services.AddTransient<NormalizeAudioStep>();
 builder.Services.AddTransient<PrepareModelInputStep>();
