@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HealthTech.Audio;
+using HealthTech.Profiles;
 using Microsoft.Extensions.Options;
 using SemanticKernel.MedicalCorrection;
 
@@ -22,7 +23,8 @@ namespace HealthTech.Transcription
         /// (texts are cut into sentence pieces and sent in batches). Saves <c>&lt;name&gt;.corrected.json</c> (same JSON,
         /// only texts changed) and <c>&lt;name&gt;.medical_corrections.md</c>; the source file is not modified.
         /// </summary>
-        Task<TranscriptCorrectionResult> CorrectTranscriptAsync(string fileName, CancellationToken cancellationToken = default);
+        Task<TranscriptCorrectionResult> CorrectTranscriptAsync(
+            string fileName, string profileKey, CancellationToken cancellationToken = default);
     }
 
     public class TranscriptCorrectionService : ITranscriptCorrectionService
@@ -32,23 +34,29 @@ namespace HealthTech.Transcription
 
         private readonly IProcessedAudioFiles _files;
         private readonly IMedicalTermCorrector _corrector;
+        private readonly IProfileCatalog _profiles;
         private readonly TranscriptsOptions _transcriptsOptions;
         private readonly ILogger<TranscriptCorrectionService> _logger;
 
         public TranscriptCorrectionService(
             IProcessedAudioFiles files,
             IMedicalTermCorrector corrector,
+            IProfileCatalog profiles,
             IOptions<TranscriptsOptions> transcriptsOptions,
             ILogger<TranscriptCorrectionService> logger)
         {
             _files = files;
             _corrector = corrector;
+            _profiles = profiles;
             _transcriptsOptions = transcriptsOptions.Value;
             _logger = logger;
         }
 
-        public async Task<TranscriptCorrectionResult> CorrectTranscriptAsync(string fileName, CancellationToken cancellationToken = default)
+        public async Task<TranscriptCorrectionResult> CorrectTranscriptAsync(
+            string fileName, string profileKey, CancellationToken cancellationToken = default)
         {
+            // Unknown key throws UnknownProfile -> 400 before the file is touched.
+            var profile = _profiles.Get(profileKey);
             var path = ResolvePath(fileName);
             var root = await ReadAsync(path, cancellationToken);
             var items = FindItems(root, path);
@@ -63,7 +71,7 @@ namespace HealthTech.Transcription
             _logger.LogInformation("Correcting medical terms in {Path}: {SegmentCount} segment(s)", path, segments.Count);
 
             var log = new CorrectionLog();
-            var corrected = await _corrector.CorrectAsync(segments, log, cancellationToken);
+            var corrected = await _corrector.CorrectAsync(segments, profile.Content, log, cancellationToken);
 
             for (var i = 0; i < items.Count; i++)
             {

@@ -9,8 +9,9 @@ namespace HealthTech.Transcription
         /// and saves the transcript as <c>&lt;name&gt;.json</c> in <paramref name="outputDirectory"/>.
         /// No speaker diarization. The source file is left untouched.
         /// </summary>
+        /// <param name="whisperPrompt">The record profile's steering phrase; empty falls back to config.</param>
         Task<TranscriptionResult> TranscribeAsync(
-            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks,
+            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks, string whisperPrompt,
             CancellationToken cancellationToken = default);
     }
 
@@ -36,7 +37,7 @@ namespace HealthTech.Transcription
         }
 
         public async Task<TranscriptionResult> TranscribeAsync(
-            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks,
+            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks, string whisperPrompt,
             CancellationToken cancellationToken = default)
         {
             const int sampleRate = AudioSampleReader.TargetSampleRate;
@@ -60,7 +61,7 @@ namespace HealthTech.Transcription
                     // whisper.cpp returns nothing for input under 1 s; pad short utterances with silence.
                     Array.Resize(ref chunkSamples, MinChunkSamples);
                 }
-                var chunkSegments = await _speechRecognition.TranscribeAsync(chunkSamples, cancellationToken);
+                var chunkSegments = await _speechRecognition.TranscribeAsync(chunkSamples, whisperPrompt, cancellationToken);
 
                 segments.AddRange(chunkSegments.Select(s => new TranscriptSegment(
                     Math.Round(chunk.Start + s.Start, 2),

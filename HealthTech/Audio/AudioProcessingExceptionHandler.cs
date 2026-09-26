@@ -23,6 +23,7 @@ namespace HealthTech.Audio
             httpContext.Response.StatusCode = audioException.Error switch
             {
                 AudioProcessingError.InputNotFound => StatusCodes.Status404NotFound,
+                AudioProcessingError.UnknownProfile => StatusCodes.Status400BadRequest,
                 AudioProcessingError.NotAudio or AudioProcessingError.CorruptedAudio or AudioProcessingError.InvalidTranscript => StatusCodes.Status422UnprocessableEntity,
                 AudioProcessingError.FfmpegUnavailable => StatusCodes.Status503ServiceUnavailable,
                 _ => StatusCodes.Status500InternalServerError

@@ -9,7 +9,8 @@ namespace HealthTech.Audio
         ConversionFailed,
         FileSystemError,
         ModelFailed,
-        InvalidTranscript
+        InvalidTranscript,
+        UnknownProfile
     }
 
     public class AudioProcessingException : Exception
