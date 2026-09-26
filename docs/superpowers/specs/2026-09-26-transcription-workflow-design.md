@@ -1,7 +1,8 @@
 # Оркестрация обработки аудио: задания, профили записей, уверенность ASR
 
 Дата: 2026-09-26
-Статус: дизайн согласован, готов к планированию реализации
+Статус: этапы 1-3 реализованы (ветка `feature/transcription-jobs`); разделы 4, 6, 10-13
+пересмотрены под двухфазный API и три типа записей, этапы 4-6 ждут реализации
 
 ## 1. Зачем
 
@@ -25,8 +26,8 @@
 в SQLite; сервис прогресса по шагам плюс детальный прогресс внутри распознавания; профили
 записей (свой initial_prompt, свой системный промпт, свой набор глоссариев); пометка
 неуверенно распознанных слов и передача её в LLM-коррекцию; файл известных фонетических
-ошибок; справочник врачей и ручная привязка спикеров; новый job-API взамен четырёх
-текущих эндпоинтов.
+ошибок; справочник врачей и ручная привязка спикеров; двухфазный job-API (загрузка файла
+отдельно, оформление записи отдельно) взамен четырёх текущих эндпоинтов.
 
 **Не входит.** Аутентификация и разграничение доступа. Работа на macOS (Metal вместо Vulkan) —
 отложено сознательно, разработка идёт под Windows; требование к коду одно: не углублять
@@ -88,16 +89,23 @@ data/healthtech.db    наши три таблицы: Dapper поверх Micros
 
 ```sql
 CREATE TABLE IF NOT EXISTS Jobs (
-    Id           TEXT PRIMARY KEY,
-    FileName     TEXT NOT NULL,
-    ProfileKey   TEXT NOT NULL,
-    Status       TEXT NOT NULL,          -- Pending | Running | Completed | Failed
-    CurrentStep  TEXT NULL,
-    Percent      INTEGER NOT NULL DEFAULT 0,
-    WorkflowId   TEXT NULL,
-    Error        TEXT NULL,
-    CreatedAt    TEXT NOT NULL,
-    CompletedAt  TEXT NULL
+    Id            TEXT PRIMARY KEY,
+    FileName      TEXT NOT NULL,
+    ProfileKey    TEXT NOT NULL,          -- пусто, пока запись не оформлена
+    Status        TEXT NOT NULL,          -- Uploaded | Pending | Running | Completed | Failed
+    CurrentStep   TEXT NULL,
+    Percent       INTEGER NOT NULL DEFAULT 0,
+    WorkflowId    TEXT NULL,
+    Error         TEXT NULL,
+    CreatedAt     TEXT NOT NULL,
+    CompletedAt   TEXT NULL,
+    -- заполняется на загрузке файла (POST /files)
+    SizeBytes     INTEGER NOT NULL DEFAULT 0,
+    Format        TEXT NULL,
+    DurationSec   REAL NULL,
+    -- заполняется при оформлении записи (POST /jobs)
+    Title         TEXT NULL,
+    SpeakersCount INTEGER NULL
 );
 
 CREATE TABLE IF NOT EXISTS Persons (
@@ -113,6 +121,16 @@ CREATE TABLE IF NOT EXISTS SpeakerBindings (
     PRIMARY KEY (JobId, SpeakerLabel)
 );
 ```
+
+Пять последних столбцов добавились вместе с двухфазным API. `CREATE TABLE IF NOT EXISTS`
+на существующей базе не делает ничего, а `ALTER TABLE ADD COLUMN` не идемпотентен и на втором
+старте падает, поэтому `DatabaseInitializer` после прогона скрипта сверяет фактический набор
+столбцов через `PRAGMA table_info(Jobs)` и досыпает недостающие. Уронить базу разработчика
+ради пяти полей нельзя: в ней лежат уже обработанные задания.
+
+`ProfileKey` остаётся `NOT NULL` и у только что загруженного файла хранит пустую строку —
+тип записи ещё не выбран. Сделать столбец nullable нечем: `ALTER TABLE` в SQLite не меняет
+ограничения существующего столбца, а пересоздание таблицы ради этого не стоит свеч.
 
 Справочник врачей наполняется тем же скриптом через `INSERT OR IGNORE` — эндпоинта на добавление
 нет сознательно, записи заводятся руками. Файл `healthtech.db` при необходимости открывается
@@ -188,44 +206,49 @@ Percent = 15 + 40 * fraction
 
 ## 6. Профили записей
 
-Тип записи выбирается при загрузке файла и хранится в `Jobs.ProfileKey`. Профиль определяет
-четыре вещи сразу: направляющую фразу для Whisper, системный промпт коррекции, набор глоссариев
-и файл фонетических ошибок.
+Тип записи выбирается при оформлении записи (`POST /jobs`, поле `discussionType`) и хранится
+в `Jobs.ProfileKey`. Ключ профиля и значение `discussionType` — одна и та же строка: заводить
+вторую таксономию и таблицу соответствий между ними незачем.
+
+Типов ровно три: `medical`, `administrative`, `financial`. Содержательно наполнен один,
+медицинский; два других — рабочие заглушки для демо: механизм тот же, контент общий.
+
+Профиль определяет четыре вещи сразу: направляющую фразу для Whisper, системный промпт
+коррекции, набор глоссариев и файл фонетических ошибок.
 
 ```
 Profiles:
-  consilium:
-    DisplayName:      "Консилиум (общий)"
+  medical:
+    DisplayName:      "Медицинская запись"
     WhisperPrompt:    "Discuție între doi colegi din spital, în română, cu cuvinte rusești..."
     SystemPromptFile: "Prompts/medical_correction.system.txt"
     Glossaries:       [ "medical_glossary.txt", "moldova_speech_glossary.txt" ]
     PhoneticFile:     "phonetic_confusions.txt"
-  onco:
-    DisplayName:      "Онкология"
-    WhisperPrompt:    <направляющая фраза под онкологию, пишется на шаге 7 реализации>
-    SystemPromptFile: "Prompts/medical_correction.system.txt"
-    Glossaries:       [ "medical_glossary.txt", "onco_glossary.txt", "moldova_speech_glossary.txt" ]
-    PhoneticFile:     "phonetic_confusions.txt"
-  icu:
-    DisplayName:      "Интенсивная терапия"
-    WhisperPrompt:    <направляющая фраза под ОИТ, пишется на шаге 7 реализации>
-    SystemPromptFile: "Prompts/medical_correction.system.txt"
-    Glossaries:       [ "medical_glossary.txt", "icu_glossary.txt", "moldova_speech_glossary.txt" ]
-    PhoneticFile:     "phonetic_confusions.txt"
+  administrative:
+    DisplayName:      "Административная запись"
+    WhisperPrompt:    <направляющая фраза без медицинской лексики>
+    SystemPromptFile: "Prompts/general_correction.system.txt"
+    Glossaries:       [ "moldova_speech_glossary.txt" ]
+  financial:
+    DisplayName:      "Финансовая запись"
+    WhisperPrompt:    <направляющая фраза с финансовой лексикой>
+    SystemPromptFile: "Prompts/general_correction.system.txt"
+    Glossaries:       [ "moldova_speech_glossary.txt" ]
 ```
 
-Оба специализированных профиля прирастают к общему `medical_glossary.txt`, а не заменяют его:
-термины из кардиологии и общей практики в записях ОИТ и онкологии встречаются ровно так же.
+`Prompts/general_correction.system.txt` — новый файл: тот же формат ответа и те же запреты,
+что в медицинском промпте, но без указаний про термины и диагнозы. Своих глоссариев у двух
+немедицинских типов нет — только список нормальной молдавской речи, который защищает
+русские вкрапления от «исправления» в румынский. Это осознанная заглушка: наполнение
+финансового и административного словарей отложено (раздел 15).
 
-Отсюда следует то, что надо проверить при реализации. `MaxGlossaryCharacters` (по умолчанию 2000)
-применяется в `MedicalTermCorrector.BuildUserMessage` **к каждому файлу отдельно**, поэтому
-третий глоссарий не вытесняет общий словарь, а увеличивает запрос ещё на 2000 символов.
-Вместе с `MaxBatchCharacters` (4000) и системным промптом это даёт порядка 12 тысяч символов
-на запрос. Текст кириллический и румынский с диакритикой, то есть токенов на символ уходит
-заметно больше, чем на английском, а `Llm:ContextSize` = 8192 и `MaxTokens` = 2048
-зарезервированы под ответ. Запас есть, но он сокращается. При добавлении профиля с третьим
-глоссарием нужно один раз посчитать реальную длину запроса в токенах и при необходимости
-опустить `MaxGlossaryCharacters` до 1200–1500 либо поднять `ContextSize`.
+Ограничение на длину запроса при трёх типах не горит: ни один профиль не подключает больше
+двух глоссариев, а `MaxGlossaryCharacters` (по умолчанию 2000) применяется в
+`MedicalTermCorrector.BuildUserMessage` **к каждому файлу отдельно**. Вместе с
+`MaxBatchCharacters` (4000) и системным промптом это порядка 8 тысяч символов на запрос
+при `Llm:ContextSize` = 8192 и `MaxTokens` = 2048 под ответ. Запас держится только потому,
+что третьего глоссария нет. Если он появится, длину запроса в токенах надо один раз
+замерить и либо опустить `MaxGlossaryCharacters` до 1200–1500, либо поднять `ContextSize`.
 
 Важное ограничение по `WhisperPrompt`: whisper.cpp обрезает initial_prompt примерно на
 224 токенах (половина текстового контекста). Это не настройка, а свойство декодера. Значит
@@ -242,12 +265,10 @@ public record RecordProfile(
     string Key,
     string DisplayName,
     string WhisperPrompt,
-    string SystemPrompt,
-    IReadOnlyList<Glossary> Glossaries,
-    Glossary? Phonetics);
+    RecordProfileContent Content);          // SystemPrompt + Glossaries (+ Phonetics на этапе 5)
 ```
 
-Неизвестный ключ профиля при создании задания → 400.
+Неизвестный ключ профиля при оформлении записи → 400 с перечнем допустимых.
 
 ### Что меняется в существующих сервисах
 
@@ -259,8 +280,9 @@ public record RecordProfile(
 (`MedicalTermCorrector.cs:19-21`) и получает профиль в параметрах `CorrectAsync`. Заголовки
 глоссариев переезжают в описание профиля.
 
-Имя `MedicalTermCorrector` пока сохраняется: оба профиля медицинские, название не врёт.
-Переименование имеет смысл, когда реально появится финансовый или административный тип.
+Имя `MedicalTermCorrector` сохраняется, хотя с появлением административного и финансового
+типов оно стало неточным. Переименование трогает публичный тип библиотеки `SemanticKernel`
+и её регистрацию, а пользы на прототипе не даёт — отложено (раздел 15).
 
 ## 7. Уверенность распознавания
 
@@ -362,30 +384,63 @@ UI показывает список меток задания и справоч
 
 ## 10. API
 
+Загрузка разведена на две фазы. Файл кладётся и разбирается одним запросом, карточка записи
+оформляется вторым, и только он запускает конвейер. UI получает размер, формат и длительность
+сразу после загрузки — до того, как пользователь заполнит форму.
+
 ```
-GET    /profiles                 список профилей для выпадашки при загрузке
-POST   /jobs                     multipart: file + profileKey → { jobId }
-GET    /jobs                     список заданий
-GET    /jobs/{id}                { status, currentStep, percent, error }
+POST   /files                    multipart: file
+                                 → { fileId, fileName, sizeBytes, format, durationSec }
+POST   /jobs                     { fileId, title, speakersCount, discussionType } → карточка
+GET    /jobs                     список записей (загруженные, но не оформленные файлы скрыты)
+GET    /jobs/{id}                карточка + { status, currentStep, percent, error }
 GET    /jobs/{id}/result         транскрипт со спикерами
+GET    /profiles                 список типов записей для выпадашки
 GET    /persons                  справочник врачей
 PUT    /jobs/{id}/speakers       [{ label: "Speaker 1", personId }]
 GET    /jobs/{id}/transcript     диалог с подставленными именами
-POST   /audio/correctTranscript?fileName=&profile=
+POST   /audio/correctTranscript?jobId=&fileName=&profile=
 ```
+
+Идентификатор один на обе фазы: `fileId` — это и есть id задания. Отдельной таблицы файлов
+и отдельного `recordId` нет: у файла и записи на прототипе один жизненный цикл, одна папка
+и один владелец, а две сущности вместо одной дали бы состояние «файл есть, записи нет»
+в двух местах сразу.
+
+**`POST /files`** санитизирует имя (`SafeFileName`), кладёт файл в `assets/input/<fileId>/`,
+прогоняет ffprobe и создаёт строку `Jobs` в статусе `Uploaded` с заполненными `SizeBytes`,
+`Format` и `DurationSec`. Конвейер не стартует. Побочный выигрыш: «не аудио» и битый файл
+отбиваются здесь же, 422 на загрузке, а не падением шага через минуту обработки. Пустой файл
+отбивается до ffprobe.
+
+**`POST /jobs`** дописывает в ту же строку `Title`, `SpeakersCount` и `ProfileKey`
+(= `discussionType`), переводит статус в `Pending` и запускает workflow. Неизвестный
+`discussionType` → 400 с перечнем допустимых, чужой или уже оформленный `fileId` → 404 и 409
+соответственно; ни то ни другое не должно молча создавать второе задание на тот же файл.
+Ответ возвращается сразу, ждать обработки запрос не должен.
+
+`speakersCount` принимается, хранится и отдаётся в карточке, но **на обработку не влияет**:
+диаризация продолжает определять число говорящих сама, как сейчас. Поле заведено под будущее
+использование и под форму загрузки; проводить его в `Diarization:NumSpeakers` — отдельное
+решение, сознательно отложенное (раздел 15).
+
+Статус `Uploaded` не подметается стартовой зачисткой осиротевших заданий: она трогает только
+`Pending` и `Running`. Загруженный, но не оформленный файл обязан пережить перезапуск —
+пользователь в этот момент просто заполняет форму.
 
 Контроллеры остаются тонкими: принять запрос, вызвать сервис, вернуть результат. Вся проверка,
 ветвления и обработка ошибок — в сервисах, отображение доменных исключений в HTTP — в
 `IExceptionHandler`. Правило проекта из `CLAUDE.md`.
 
-`POST /jobs` создаёт запись в `Jobs`, кладёт файл в `assets/input/<jobId>/` и запускает
-workflow, после чего сразу возвращает `jobId`. Ждать обработки запрос не должен.
+Одношаговый `POST /jobs` с multipart и полем `profile`, сделанный на этапе 1, заменяется
+этими двумя ручками. Четыре исходных эндпоинта — `validateAndProcess`, `transcribeProcessed`,
+`diarizeProcessed`, `transcribeWithSpeakers` — уже удалены: с каталогами по заданиям «первый
+файл в общей папке» перестал иметь смысл. `correctTranscript` остаётся и принимает профиль —
+он позволяет крутить глоссарии и промпты, не переплачивая за распознавание.
 
-Четыре текущих эндпоинта — `validateAndProcess`, `transcribeProcessed`, `diarizeProcessed`,
-`transcribeWithSpeakers` — удаляются: с каталогами по заданиям «первый файл в общей папке»
-перестаёт иметь смысл, а держать два параллельных пути ради демо незачем.
-`correctTranscript` остаётся и получает параметр профиля — он позволяет крутить глоссарии
-и промпты, не переплачивая каждый раз за распознавание.
+`momLang` в API не появляется. `Whisper:Language` остаётся жёстко `ro`: на здешних записях
+`auto` определяет язык по чанкам вразнобой и начинает переводить румынский в русский, так что
+выбор языка распознавания из UI сделал бы результат хуже, а не гибче.
 
 ## 11. Затрагиваемые файлы
 
@@ -394,8 +449,14 @@ workflow, после чего сразу возвращает `jobId`. Ждат�
 | Файл | Что происходит |
 |---|---|
 | `HealthTech/Program.cs` | регистрация WorkflowCore, Dapper, репозиториев, `IProfileCatalog`, прогона `schema.sql` |
+| `HealthTech/Controllers/JobsController.cs` | `POST /jobs` из multipart становится JSON-оформлением записи |
+| `HealthTech/Jobs/JobService.cs` | `CreateAsync` разводится на `UploadAsync` и `SaveRecordAsync` |
+| `HealthTech/Jobs/Job.cs` | `Uploaded` в статусах; `Title`, `SpeakersCount`, `SizeBytes`, `Format`, `DurationSec` |
+| `HealthTech/Jobs/JobRepository.cs` | новые столбцы в маппинге; список скрывает `Uploaded` |
+| `HealthTech/Data/DatabaseInitializer.cs` | досыпка недостающих столбцов через `PRAGMA table_info` |
+| `HealthTech/Data/schema.sql` | новые столбцы `Jobs` |
 | `HealthTech/Controllers/AudioController.cs` | остаётся только `correctTranscript` |
-| `HealthTech/Audio/AudioProcessor.cs` | выходной путь по заданию; отдельный метод для `.16k.wav` |
+| `HealthTech/Audio/AudioProcessor.cs` | выходной путь по заданию; отдельный метод для `.16k.wav`; публичный разбор файла (формат + длительность) для `POST /files` |
 | `HealthTech/Audio/AudioBatchService.cs` | удаляется вместе с `validateAndProcess` |
 | `HealthTech/Transcription/ProcessedAudioFiles.cs` | `FindFirst()` удаляется, сохранение по каталогу задания |
 | `HealthTech/Transcription/ProcessedAudioTranscriptionService.cs` | приём пути и чанков, `IProgress<double>`, сбор `lowConfidence` |
@@ -414,36 +475,49 @@ workflow, после чего сразу возвращает `jobId`. Ждат�
 
 Новые: `Jobs/` (модель задания, репозитории на Dapper, сервис заданий), `Workflow/` (определение
 workflow и восемь шагов), `Profiles/` (`IProfileCatalog`, `RecordProfile`), `Speakers/`
-(справочник и привязки), `data/schema.sql`, `SemanticKernel/Glossary/phonetic_confusions.txt`,
-`SemanticKernel/Glossary/onco_glossary.txt`,
-`SemanticKernel/Glossary/icu_glossary.txt`.
+(справочник и привязки), `HealthTech/Controllers/FilesController.cs`, `data/schema.sql`,
+`SemanticKernel/Prompts/general_correction.system.txt`,
+`SemanticKernel/Glossary/phonetic_confusions.txt`.
 
 Пакеты: `WorkflowCore` 3.21.0, `WorkflowCore.Persistence.Sqlite` 3.21.0, `Dapper`,
 `Microsoft.Data.Sqlite`.
 
 ## 12. Порядок реализации
 
-1. **Каркас заданий и оркестрации.** Каталоги по заданиям, две базы, схема, `Jobs`, workflow
-   из восьми шагов с весами, `POST /jobs` и `GET /jobs/{id}`. Существующие сервисы переводятся
-   на явные пути. К концу шага загруженный файл проходит весь конвейер, а прогресс виден.
-2. **Коллбэк прогресса** внутри распознавания и коррекции.
-3. **Профили.** `IProfileCatalog`, секция конфига, проброс промпта в Whisper и профиля
-   в корректор. Содержательно — пока один профиль `consilium` на текущем контенте.
-4. **Уверенность ASR.** `WithProbabilities()`, сборка слов, три пересчёта смещений, поле
-   в файлах и в запросе к модели, абзац в промпте.
-5. **Фонетический список.** Файл, заголовок, подключение к профилю.
-6. **Справочник и привязка спикеров.**
-7. **Профили `onco` и `icu`**: по глоссарию и направляющей фразе на каждый, плюс замер
-   реальной длины запроса в токенах (см. раздел 6).
+Этапы 1-3 выполнены в ветке `feature/transcription-jobs`.
 
-Пункты 1 и 2 — фундамент, остальное на него опирается. Пункты 4 и 5 независимы друг от друга
-и от 6, их порядок можно менять.
+1. ~~**Каркас заданий и оркестрации.**~~ Каталоги по заданиям, две базы, схема, `Jobs`,
+   workflow из восьми шагов с весами, `POST /jobs` и `GET /jobs/{id}`. Существующие сервисы
+   переведены на явные пути. **Сделано.**
+2. ~~**Коллбэк прогресса**~~ внутри распознавания и коррекции. **Сделано.**
+3. ~~**Профили.**~~ `IProfileCatalog`, секция конфига, проброс промпта в Whisper и профиля
+   в корректор; один профиль на текущем контенте. **Сделано.**
+4. **Двухфазный API и три типа записей.** `POST /files` с разбором файла, статус `Uploaded`,
+   новые столбцы `Jobs` и досыпка их в существующей базе, `POST /jobs` как оформление записи,
+   профили `medical` / `administrative` / `financial` вместо `consilium`, общий системный
+   промпт для двух немедицинских типов.
+5. **Уверенность ASR.** `WithProbabilities()`, сборка слов, три пересчёта смещений, поле
+   в файлах и в запросе к модели, абзац в промпте.
+6. **Фонетический список.** Файл, заголовок, подключение к профилю.
+7. **Справочник и привязка спикеров.**
+
+Пункт 4 опирается на 1-3 и должен идти раньше остальных: он меняет форму `Jobs` и набор
+профилей, на которые опираются пункты 5-7. Пункты 5 и 6 независимы друг от друга и от 7,
+их порядок можно менять.
 
 ## 13. Проверка
 
 Тесты не пишутся (правило проекта). Проверка ручная, запуском приложения:
 
-- загрузка файла через `POST /jobs` с каждым из трёх профилей; задание доходит до `Completed`;
+- `POST /files` возвращает размер, формат и длительность, совпадающие с тем, что показывает
+  ffprobe по тому же файлу; строка появляется в статусе `Uploaded` и не видна в `GET /jobs`;
+- `POST /jobs` с каждым из трёх типов записи запускает обработку, и задание доходит до
+  `Completed`; неизвестный `discussionType` даёт 400 с перечнем, повторное оформление того же
+  `fileId` — 409, несуществующий `fileId` — 404;
+- не-аудио отбивается уже на `POST /files` с 422, задание не создаётся, каталог не остаётся;
+- перезапуск приложения не трогает строки в `Uploaded`, но помечает `Failed` те, что были
+  в `Pending`/`Running`;
+- `speakersCount` виден в карточке и не влияет на число спикеров в результате;
 - `GET /jobs/{id}` во время обработки показывает растущий процент и меняющийся шаг, в том
   числе внутри распознавания;
 - две загрузки подряд не мешают друг другу: артефакты лежат в разных каталогах;
@@ -470,8 +544,13 @@ workflow и восемь шагов), `Profiles/` (`IProfileCatalog`, `RecordPro
 ## 15. Отложено
 
 Аутентификация (`Program.cs` вызывает `UseAuthorization()` без единой схемы, все эндпоинты
-открыты). Работа на macOS. Автоматическое опознание спикеров по голосу. Профили для финансовых
-и административных записей. Переименование `MedicalTermCorrector` в доменно-нейтральное.
+открыты). Работа на macOS. Автоматическое опознание спикеров по голосу. Наполнение глоссариев
+для финансовых и административных записей — механизм есть, контента нет. Проведение
+`speakersCount` в число кластеров диаризации: поле принимается и хранится, но на обработку
+не влияет; жёсткая фиксация числа говорящих по заявленному значению делает результат хуже
+автоопределения, когда пользователь ошибся. Уборка строк, оставшихся в `Uploaded`:
+загруженный и брошенный файл живёт вечно. Переименование `MedicalTermCorrector`
+в доменно-нейтральное.
 Дедупликация слов на стыках перекрывающихся чанков. Вынос текста расшифровки из логов
 (`MedicalTermCorrector` пишет ответ модели в лог при сбое парсинга — для реальных записей
 пациентов так нельзя).
