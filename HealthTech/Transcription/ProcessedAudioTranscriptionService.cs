@@ -5,11 +5,13 @@ namespace HealthTech.Transcription
     public interface IProcessedAudioTranscriptionService
     {
         /// <summary>
-        /// Takes the first audio file (by name) from the processed directory, splits it into speech chunks (VAD),
-        /// runs speech recognition on each chunk and saves the transcript as JSON. No speaker diarization.
-        /// The source file is left untouched.
+        /// Runs speech recognition over the given speech chunks of <paramref name="wavPath"/> (16 kHz mono)
+        /// and saves the transcript as <c>&lt;name&gt;.json</c> in <paramref name="outputDirectory"/>.
+        /// No speaker diarization. The source file is left untouched.
         /// </summary>
-        Task<TranscriptionResult> TranscribeFirstProcessedAsync(CancellationToken cancellationToken = default);
+        Task<TranscriptionResult> TranscribeAsync(
+            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks,
+            CancellationToken cancellationToken = default);
     }
 
     public class ProcessedAudioTranscriptionService : IProcessedAudioTranscriptionService
@@ -18,37 +20,33 @@ namespace HealthTech.Transcription
 
         private readonly IProcessedAudioFiles _files;
         private readonly IAudioSampleReader _sampleReader;
-        private readonly IVoiceActivityService _voiceActivity;
         private readonly ISpeechRecognitionService _speechRecognition;
         private readonly ILogger<ProcessedAudioTranscriptionService> _logger;
 
         public ProcessedAudioTranscriptionService(
             IProcessedAudioFiles files,
             IAudioSampleReader sampleReader,
-            IVoiceActivityService voiceActivity,
             ISpeechRecognitionService speechRecognition,
             ILogger<ProcessedAudioTranscriptionService> logger)
         {
             _files = files;
             _sampleReader = sampleReader;
-            _voiceActivity = voiceActivity;
             _speechRecognition = speechRecognition;
             _logger = logger;
         }
 
-        public async Task<TranscriptionResult> TranscribeFirstProcessedAsync(CancellationToken cancellationToken = default)
+        public async Task<TranscriptionResult> TranscribeAsync(
+            string wavPath, string outputDirectory, IReadOnlyList<SpeechChunk> chunks,
+            CancellationToken cancellationToken = default)
         {
             const int sampleRate = AudioSampleReader.TargetSampleRate;
 
-            var path = _files.FindFirst();
-            var fileName = Path.GetFileName(path);
-
-            var samples = await _sampleReader.ReadMono16kAsync(path, cancellationToken);
+            var fileName = Path.GetFileName(wavPath);
+            var samples = await _sampleReader.ReadMono16kAsync(wavPath, cancellationToken);
             var durationSeconds = Math.Round((double)samples.Length / sampleRate, 2);
             _logger.LogInformation("Transcribing {FileName}, duration {DurationSeconds:F1} s", fileName, durationSeconds);
 
             var stopwatch = Stopwatch.StartNew();
-            var chunks = _voiceActivity.DetectChunks(samples);
 
             // Each chunk is transcribed on its own; Whisper's timestamps are shifted back to file time.
             var segments = new List<TranscriptSegment>();
@@ -75,7 +73,7 @@ namespace HealthTech.Transcription
                 fileName, transcriptionMs, chunks.Count, segments.Count);
 
             var result = new TranscriptionResult(fileName, durationSeconds, segments, transcriptionMs);
-            await _files.SaveJsonAsync(result, path, ".json", cancellationToken);
+            await _files.SaveJsonAsync(result, outputDirectory, wavPath, ".json", cancellationToken);
             return result;
         }
     }

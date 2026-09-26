@@ -75,8 +75,10 @@ namespace HealthTech.Transcription
                 root["text"] = TranscriptDialogue.Format(corrected.Select(s => (s.Speaker, s.Text)));
             }
 
-            var correctedPath = await _files.SaveJsonAsync(root, path, ".corrected.json", cancellationToken);
-            var reportPath = await _files.SaveTextAsync(log.ToMarkdown(), path, ".medical_corrections.md", cancellationToken);
+            // Результат кладётся рядом с исходником: он может лежать в каталоге задания.
+            var directory = Path.GetDirectoryName(path)!;
+            var correctedPath = await _files.SaveJsonAsync(root, directory, path, ".corrected.json", cancellationToken);
+            var reportPath = await _files.SaveTextAsync(log.ToMarkdown(), directory, path, ".medical_corrections.md", cancellationToken);
 
             return new TranscriptCorrectionResult(
                 Path.GetFileName(path), Path.GetFileName(correctedPath), Path.GetFileName(reportPath), segments.Count,

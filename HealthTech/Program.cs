@@ -28,7 +28,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.Configure<AudioOptions>(builder.Configuration.GetSection(AudioOptions.SectionName));
 builder.Services.AddSingleton<IAudioProcessor, AudioProcessor>();
-builder.Services.AddSingleton<IAudioBatchService, AudioBatchService>();
+builder.Services.AddSingleton<IJobPaths, JobPaths>();
 
 // Model/output paths are made absolute against the content root; ValidateOnStart fails startup if a model file is missing.
 builder.Services.AddOptions<WhisperOptions>()
@@ -68,7 +68,7 @@ builder.Services.AddSingleton<ISpeakerDiarizationService, SherpaSpeakerDiarizati
 builder.Services.AddSingleton<IVoiceActivityService, SileroVoiceActivityService>();
 builder.Services.AddSingleton<IProcessedAudioTranscriptionService, ProcessedAudioTranscriptionService>();
 builder.Services.AddSingleton<IProcessedAudioDiarizationService, ProcessedAudioDiarizationService>();
-builder.Services.AddSingleton<IProcessedAudioSpeakerTranscriptService, ProcessedAudioSpeakerTranscriptService>();
+builder.Services.AddSingleton<ISpeakerAlignmentService, SpeakerAlignmentService>();
 builder.Services.AddSingleton<ITranscriptCorrectionService, TranscriptCorrectionService>();
 
 // Local LLM (LLamaSharp + Semantic Kernel) for medical term correction; defaults in appsettings.llm.json, "Llm" section overrides.
