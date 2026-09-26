@@ -25,60 +25,142 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    // Headings of the generation template, in order. The agenda list and everything between
-    // "## Decizii" and "## Următoarea ședință" are rendered from the facts, not taken from the model.
-    private static readonly string[] RequiredHeadings =
-    [
-        "# Proces-verbal al ședinței", "## Participanți", "## Ordinea de zi", "## Desfășurarea ședinței",
-        "## Decizii", "## Acțiuni", "## Probleme deschise", "## Următoarea ședință", "## Rezumat"
-    ];
+    private const int FragmentNoteReserve = 300;
+    private const int ConsolidationMaxTokens = 1024;
 
     private readonly IChatCompletionProvider _chatProvider;
+    private readonly ITokenCounter _tokens;
     private readonly MinutesOptions _options;
     private readonly ILogger<MeetingMinutesGenerator> _logger;
 
-    public MeetingMinutesGenerator(IChatCompletionProvider chatProvider, IOptions<MinutesOptions> options,
+    public MeetingMinutesGenerator(IChatCompletionProvider chatProvider, ITokenCounter tokens, IOptions<MinutesOptions> options,
         ILogger<MeetingMinutesGenerator> logger)
     {
         _chatProvider = chatProvider;
+        _tokens = tokens;
         _options = options.Value;
         _logger = logger;
-        if (_options.MaxTranscriptCharacters <= 0 || _options.MaxFactsCharacters <= 0 ||
-            _options.ExtractionMaxTokens <= 0 || _options.GenerationMaxTokens <= 0 ||
-            _options.MaxVerificationCharacters <= 0 || _options.VerificationMaxTokens <= 0 ||
-            _options.MaxRetries is < 0 or > 10)
+        if (_options.MaxWindowTokens < TokenBudget.MinimalWindowTokens || _options.ExtractionMaxTokens <= 0 ||
+            _options.VerificationMaxTokens <= 0 || _options.MaxRetries is < 0 or > 10)
         {
-            throw new ArgumentException("Minutes limits must be positive and MaxRetries must be between 0 and 10.", nameof(options));
+            throw new LlmConfigurationException($"Minutes:MaxWindowTokens must be at least {TokenBudget.MinimalWindowTokens}, " +
+                "Minutes:ExtractionMaxTokens and Minutes:VerificationMaxTokens positive and Minutes:MaxRetries between 0 and 10.");
         }
     }
 
     public async Task<MeetingMinutesResult> GenerateAsync(string transcript, MeetingMetadata? metadata = null,
         CancellationToken ct = default)
     {
-        var facts = await ExtractFactsAsync(transcript, metadata, ct);
+        var facts = await ExtractFactsAsync(transcript, metadata, ct: ct);
         var minutes = await GenerateMinutesAsync(facts, ct);
-        var verification = await VerifyMinutesAsync(transcript, minutes, metadata, ct);
+        var verification = await VerifyMinutesAsync(transcript, minutes, metadata, ct: ct);
         return new MeetingMinutesResult(facts, minutes, verification);
     }
 
-    public Task<MinutesVerification> VerifyMinutesAsync(string transcript, string minutesMarkdown,
-        MeetingMetadata? metadata = null, CancellationToken ct = default)
+    private const int VerificationNoteReserve = 100;
+
+    public async Task<MinutesVerification> VerifyMinutesAsync(string transcript, string minutesMarkdown,
+        MeetingMetadata? metadata = null, IProgress<MinutesProgress>? progress = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transcript);
         ArgumentException.ThrowIfNullOrWhiteSpace(minutesMarkdown);
-        EnsureLength(transcript, _options.MaxTranscriptCharacters, "transcript");
-        var input = JsonSerializer.Serialize(new { transcript, metadata, document = minutesMarkdown }, FactsJsonOptions);
-        EnsureLength(input, _options.MaxVerificationCharacters, "verification input");
+        var prompt = await ReadPromptAsync("minutes_verification.system.txt", ct);
         // A source quotation may come from the transcript or from a metadata value (a bound
         // participant's name, the record title): both are sources of truth for the model.
+        var sources = Sources(transcript, metadata);
+        var budget = TokenBudget.ForInput(_tokens.ContextSize, _options.VerificationMaxTokens);
+
+        // Verify the final rendered document against the source, not against the extracted facts.
+        var whole = VerificationInput(transcript, metadata, minutesMarkdown);
+        if (await _tokens.CountPromptAsync(prompt, whole, ct) <= budget)
+        {
+            progress?.Report(new MinutesProgress(MinutesStage.Verifying, 1, 1));
+            return await RunStageAsync("Minutes Verification", prompt, whole, _options.VerificationMaxTokens,
+                response => ParseVerification(response, sources, minutesMarkdown), ct);
+        }
+
+        var windowBudget = budget - await _tokens.CountPromptAsync(prompt, VerificationInput("", metadata, minutesMarkdown), ct)
+                           - VerificationNoteReserve;
+        if (windowBudget < TokenBudget.MinimalWindowTokens)
+        {
+            _logger.LogWarning("MOM verification skipped: the document leaves {Window} tokens for the transcript (context {Context})",
+                windowBudget, _tokens.ContextSize);
+            return new MinutesVerification
+            {
+                Completed = false,
+                Summary = "Verificarea automată nu a fost efectuată: documentul este prea mare pentru contextul modelului " +
+                          $"(Llm:ContextSize = {_tokens.ContextSize}). Documentul necesită revizuire manuală.",
+                Findings = []
+            };
+        }
+
+        // The whole document against one fragment at a time. "Unsupported" (nowhere in the transcript)
+        // cannot be judged from a fragment, so it is dropped; the other three kinds are local.
+        var windows = await TranscriptWindows.SplitAsync(transcript, windowBudget, _tokens, ct);
+        if (windows.Count == 1)
+        {
+            // Measured together with the document it did not fit, measured alone it does: the difference
+            // is inside the margin. A one-fragment check would only lose the Unsupported findings.
+            progress?.Report(new MinutesProgress(MinutesStage.Verifying, 1, 1));
+            return await RunStageAsync("Minutes Verification", prompt, whole, _options.VerificationMaxTokens,
+                response => ParseVerification(response, sources, minutesMarkdown), ct);
+        }
+        _logger.LogInformation("MOM verification: transcript split into {Count} fragments of at most {Budget} tokens", windows.Count, windowBudget);
+        var findings = new List<MinutesDiscrepancy>();
+        var discarded = 0;
+        var failed = new List<int>();
+        for (var k = 0; k < windows.Count; k++)
+        {
+            progress?.Report(new MinutesProgress(MinutesStage.Verifying, k + 1, windows.Count));
+            var input = VerificationInput(windows[k], metadata, minutesMarkdown) +
+                        $"\n\nAcesta este fragmentul {k + 1} din {windows.Count} al transcriptului. " +
+                        "Raportează doar discrepanțele pe care le arată acest fragment.";
+            try
+            {
+                var result = await RunStageAsync($"Minutes Verification {k + 1}/{windows.Count}", prompt, input,
+                    _options.VerificationMaxTokens, response => ParseVerification(response, sources, minutesMarkdown), ct);
+                findings.AddRange(result.Findings.Where(f => f.Kind != "Unsupported"));
+                discarded += result.DiscardedFindings;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "MOM verification fragment {Fragment} failed", k + 1);
+                failed.Add(k + 1);
+            }
+        }
+
+        var unique = findings.DistinctBy(f => (f.Kind, f.TranscriptQuote, f.DocumentQuote)).ToList();
+        var summary = $"Verificat pe {windows.Count} fragmente: {unique.Count} discrepanțe. " +
+                      "Afirmațiile fără suport în transcript nu pot fi verificate pe fragmente.";
+        if (discarded > 0)
+        {
+            summary += $" {discarded} constatări au fost eliminate: citatele nu au putut fi regăsite în text.";
+        }
+        if (failed.Count > 0)
+        {
+            summary += $" Fragmentele {string.Join(", ", failed)} nu au putut fi verificate.";
+        }
+        return new MinutesVerification
+        {
+            Summary = summary,
+            Findings = unique,
+            DiscardedFindings = discarded,
+            Completed = failed.Count == 0,
+            Partial = true
+        };
+    }
+
+    private static string VerificationInput(string transcript, MeetingMetadata? metadata, string document) =>
+        JsonSerializer.Serialize(new { transcript, metadata, document }, FactsJsonOptions);
+
+    private static List<string> Sources(string transcript, MeetingMetadata? metadata)
+    {
         var sources = new List<string> { transcript };
         if (metadata != null)
         {
             sources.AddRange(MetadataValues(metadata));
         }
-        // Verify the final rendered document against the source, not against potentially incomplete extracted facts.
-        return RunStageAsync("Minutes Verification", "minutes_verification.system.txt", input,
-            _options.VerificationMaxTokens, response => ParseVerification(response, sources, minutesMarkdown), ct);
+        return sources;
     }
 
     private static IEnumerable<string> MetadataValues(MeetingMetadata metadata)
@@ -163,6 +245,9 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
             SuggestedCorrection = suggestedCorrection.Trim()
         };
     }
+
+    private static int ReadInt(JsonObject item, string name) =>
+        item[name] is JsonValue value && value.TryGetValue<int>(out var number) ? number : 0;
 
     private static string? ReadString(JsonObject item, string name) =>
         item[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
@@ -249,116 +334,136 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
     }
 
     public async Task<MeetingFacts> ExtractFactsAsync(string transcript, MeetingMetadata? metadata = null,
-        CancellationToken ct = default)
+        IProgress<MinutesProgress>? progress = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(transcript);
-        EnsureLength(transcript, _options.MaxTranscriptCharacters, "transcript");
-        return await RunStageAsync("Fact Extraction and Summary", "minutes_extraction.system.txt",
-            JsonSerializer.Serialize(new { transcript, metadata }, FactsJsonOptions), _options.ExtractionMaxTokens,
+        var prompt = await ReadPromptAsync("minutes_extraction.system.txt", ct);
+        var inputBudget = TokenBudget.ForInput(_tokens.ContextSize, _options.ExtractionMaxTokens);
+        var frame = await _tokens.CountPromptAsync(prompt, ExtractionInput("", metadata), ct);
+        var windowBudget = Math.Min(_options.MaxWindowTokens, inputBudget - frame - FragmentNoteReserve);
+        if (windowBudget < TokenBudget.MinimalWindowTokens)
+        {
+            throw new LlmConfigurationException($"Llm:ContextSize = {_tokens.ContextSize} leaves {windowBudget} tokens for a transcript " +
+                $"window next to the extraction prompt; at least {TokenBudget.MinimalWindowTokens} are needed.");
+        }
+
+        var windows = await TranscriptWindows.SplitAsync(transcript, windowBudget, _tokens, ct);
+        if (windows.Count == 1)
+        {
+            // Short transcript: exactly the request it has always been.
+            progress?.Report(new MinutesProgress(MinutesStage.Extracting, 1, 1));
+            return await ExtractAsync("Fact Extraction and Summary", prompt, ExtractionInput(transcript, metadata), ct);
+        }
+
+        _logger.LogInformation("MOM extraction: transcript split into {Count} fragments of at most {Budget} tokens", windows.Count, windowBudget);
+        var parts = new List<MeetingFacts>();
+        for (var k = 0; k < windows.Count; k++)
+        {
+            progress?.Report(new MinutesProgress(MinutesStage.Extracting, k + 1, windows.Count));
+            // Earlier topics, oldest dropped first while the hint does not fit: a discussion that
+            // crosses into this fragment most likely continues one of the latest topics.
+            var topics = parts.SelectMany(p => p.Agenda!).Select(a => a.Topic).Distinct().ToList();
+            var all = topics.Count;
+            var input = ExtractionInput(windows[k], metadata) + FragmentNote(k + 1, windows.Count, topics);
+            while (topics.Count > 0 && await _tokens.CountPromptAsync(prompt, input, ct) > inputBudget)
+            {
+                topics.RemoveAt(0);
+                input = ExtractionInput(windows[k], metadata) + FragmentNote(k + 1, windows.Count, topics);
+            }
+            if (topics.Count < all)
+            {
+                _logger.LogWarning("MOM extraction fragment {Fragment}: topics hint kept {Kept} of {All} topics to fit the context",
+                    k + 1, topics.Count, all);
+            }
+            parts.Add(await ExtractAsync($"Fact Extraction {k + 1}/{windows.Count}", prompt, input, ct));
+        }
+
+        progress?.Report(new MinutesProgress(MinutesStage.Consolidating, 1, 1));
+        var merged = MeetingFactsMerger.Merge(parts);
+        return NormalizeFacts(await ConsolidateAsync(merged, parts, ct));
+    }
+
+    private Task<MeetingFacts> ExtractAsync(string stage, string prompt, string input, CancellationToken ct) =>
+        RunStageAsync(stage, prompt, input, _options.ExtractionMaxTokens,
             response => NormalizeFacts(JsonSerializer.Deserialize<MeetingFacts>(UnwrapFence(response), FactsJsonOptions)
                 ?? throw new JsonException("Expected a facts object.")), ct);
+
+    private static string ExtractionInput(string transcript, MeetingMetadata? metadata) =>
+        JsonSerializer.Serialize(new { transcript, metadata }, FactsJsonOptions);
+
+    private static string FragmentNote(int fragment, int total, IReadOnlyList<string> topics)
+    {
+        var note = $"\n\nAcesta este fragmentul {fragment} din {total} al transcriptului. " +
+                   "Extrage doar faptele din acest fragment; nu presupune că ședința începe sau se termină aici.";
+        if (topics.Count > 0)
+        {
+            note += "\nTeme identificate deja în fragmentele anterioare:\n" +
+                    string.Join('\n', topics.Select((topic, i) => $"{i + 1}. {topic}")) +
+                    "\nDacă fragmentul continuă una dintre aceste teme, folosește exact același titlu (topic).";
+        }
+        return note;
+    }
+
+    // Groups topics that are the same under different titles and writes one summary. The model only sees
+    // titles and fragment summaries; the facts stay in code. On failure the merge stands as it is.
+    private async Task<MeetingFacts> ConsolidateAsync(MeetingFacts merged, IReadOnlyList<MeetingFacts> parts, CancellationToken ct)
+    {
+        var input = JsonSerializer.Serialize(new
+        {
+            topics = merged.Agenda!.Select(a => new { id = a.Id, topic = a.Topic }),
+            summaries = parts.Select(p => p.Summary)
+        }, FactsJsonOptions);
+        try
+        {
+            var prompt = await ReadPromptAsync("minutes_consolidation.system.txt", ct);
+            var result = await RunStageAsync("Consolidation", prompt, input, ConsolidationMaxTokens, ParseConsolidation, ct);
+            return MeetingFactsMerger.ApplyTopicMerges(merged, result.Merges) with { Summary = result.Summary };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "MOM consolidation failed; topics are not merged and the fragment summaries are joined");
+            return merged;
+        }
+    }
+
+    private sealed record Consolidation(IReadOnlyList<(int Id, int Into)> Merges, string Summary);
+
+    private static Consolidation ParseConsolidation(string response)
+    {
+        var root = JsonNode.Parse(UnwrapFence(response)) as JsonObject
+            ?? throw new JsonException("Expected a consolidation object.");
+        var summary = ReadString(root, "summary");
+        if (string.IsNullOrWhiteSpace(summary) || root["merge"] is not JsonArray merges)
+        {
+            throw new FormatException("Consolidation must contain merge and summary.");
+        }
+        // Flat {"id","into"} objects: with nested id arrays ([[1,2,5]]) the 7B model repeats the group
+        // outside the array and the JSON breaks on every attempt.
+        var parsed = merges.OfType<JsonObject>()
+            .Select(item => (Id: ReadInt(item, "id"), Into: ReadInt(item, "into")))
+            .Where(merge => merge.Id > 0 && merge.Into > 0)
+            .ToList();
+        return new Consolidation(parsed, summary.Trim());
     }
 
     public Task<string> GenerateMinutesAsync(MeetingFacts facts, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(facts);
-        var normalizedFacts = NormalizeFacts(facts);
-        var input = JsonSerializer.Serialize(normalizedFacts, FactsJsonOptions);
-        EnsureLength(input, _options.MaxFactsCharacters, "extracted facts");
-        // A fresh history contains only validated stage-one facts, never the transcript.
-        return RunStageAsync("Minutes Generation", "minutes_generation.system.txt", input,
-            _options.GenerationMaxTokens, response =>
-            {
-                var markdown = UnwrapFence(response);
-                var lines = markdown.Split('\n');
-                var previousIndex = -1;
-                foreach (var heading in RequiredHeadings)
-                {
-                    var indices = Enumerable.Range(0, lines.Length).Where(i => lines[i].Trim() == heading).ToArray();
-                    if (indices.Length != 1 || indices[0] <= previousIndex)
-                    {
-                        throw new FormatException($"Missing, duplicate or out-of-order minutes heading: {heading}");
-                    }
-                    previousIndex = indices[0];
-                }
-                // The agenda list, decisions, actions and open issues are rendered from the facts,
-                // with their agenda references. The second model may format prose, but cannot drop
-                // an item, move it to another agenda point or replace an unspecified owner/deadline
-                // with a guess. (On a short recording the model tends to keep the agenda note and
-                // skip the list itself.)
-                var agendaIndex = Array.FindIndex(lines, line => line.Trim() == "## Ordinea de zi");
-                var courseIndex = Array.FindIndex(lines, line => line.Trim() == "## Desfășurarea ședinței");
-                var decisionsIndex = Array.FindIndex(lines, line => line.Trim() == "## Decizii");
-                var nextMeetingIndex = Array.FindIndex(lines, line => line.Trim() == "## Următoarea ședință");
-                return string.Join('\n', lines.Take(agendaIndex)) + "\n\n" +
-                    RenderAgenda(normalizedFacts) + "\n\n" +
-                    string.Join('\n', lines.Skip(courseIndex).Take(decisionsIndex - courseIndex)) + "\n\n" +
-                    RenderTables(normalizedFacts) + "\n\n" + string.Join('\n', lines.Skip(nextMeetingIndex));
-            }, ct);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(MinutesRenderer.Render(NormalizeFacts(facts)));
     }
 
-    private static string RenderAgenda(MeetingFacts facts)
-    {
-        var agenda = facts.Agenda!;
-        if (agenda.Count == 0)
-        {
-            return "## Ordinea de zi\n\nNu a fost consemnată ordinea de zi.";
-        }
-        var items = string.Join('\n', agenda.Select(item => $"{item.Id}. {item.Topic}"));
-        var note = facts.AgendaExplicit ? "" : "\n\n*Ordinea de zi a fost stabilită pe baza temelor discutate.*";
-        return "## Ordinea de zi\n\n" + items + note;
-    }
+    private static async Task<string> ReadPromptAsync(string file, CancellationToken ct) =>
+        await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Prompts", file), ct);
 
-    private static string RenderTables(MeetingFacts facts) =>
-        "## Decizii\n\n" + RenderDecisions(facts.Decisions!) + "\n\n" +
-        "## Acțiuni\n\n" + RenderActions(facts.Actions!) + "\n\n" +
-        "## Probleme deschise\n\n" + RenderIssues(facts.OpenIssues!);
-
-    private static string RenderDecisions(IReadOnlyList<MeetingDecision> decisions)
-    {
-        if (decisions.Count == 0)
-        {
-            return "Nu au fost consemnate decizii.";
-        }
-        var rows = decisions.Select((decision, index) =>
-            $"| {index + 1} | {Cell(decision.Description)} | {AgendaCell(decision.AgendaId)} |");
-        return "| Nr. | Decizie | Punct |\n| --- | --- | --- |\n" + string.Join('\n', rows);
-    }
-
-    private static string RenderActions(IReadOnlyList<MeetingAction> actions)
-    {
-        if (actions.Count == 0)
-        {
-            return "Nu au fost consemnate acțiuni.";
-        }
-        var rows = actions.Select((action, index) =>
-            $"| {index + 1} | {Cell(action.Description)} | {Cell(action.Responsible!)} | {Cell(action.Deadline!)} | {AgendaCell(action.AgendaId)} |");
-        return "| Nr. | Acțiune | Responsabil | Termen | Punct |\n| --- | --- | --- | --- | --- |\n" + string.Join('\n', rows);
-    }
-
-    private static string RenderIssues(IReadOnlyList<MeetingIssue> issues)
-    {
-        if (issues.Count == 0)
-        {
-            return "Nu au fost consemnate probleme deschise.";
-        }
-        var rows = issues.Select((issue, index) =>
-            $"| {index + 1} | {Cell(issue.Description)} | {AgendaCell(issue.AgendaId)} |");
-        return "| Nr. | Problemă | Punct |\n| --- | --- | --- |\n" + string.Join('\n', rows);
-    }
-
-    private static string AgendaCell(int? agendaId) =>
-        agendaId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "–";
-
-    private static string Cell(string value) => System.Net.WebUtility.HtmlEncode(value)
-        .Replace("\\", "&#92;").Replace("|", "&#124;").Replace("`", "&#96;")
-        .Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "<br>");
-
-    private async Task<T> RunStageAsync<T>(string stage, string promptFile, string input, int maxTokens,
+    private async Task<T> RunStageAsync<T>(string stage, string prompt, string input, int maxTokens,
         Func<string, T> parse, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var prompt = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Prompts", promptFile), ct);
+        var budget = TokenBudget.ForInput(_tokens.ContextSize, maxTokens);
+        var inputTokens = await _tokens.CountPromptAsync(prompt, input, ct);
+        _logger.Log(inputTokens > budget ? LogLevel.Warning : LogLevel.Information,
+            "MOM stage {Stage}: {Tokens}/{Budget} input tokens", stage, inputTokens, budget);
         var chat = await _chatProvider.GetChatCompletionAsync(ct);
         var settings = new LLamaSharpPromptExecutionSettings { Temperature = 0, MaxTokens = maxTokens };
         Exception? lastError = null;
@@ -476,14 +581,5 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
             }
         }
         return text;
-    }
-
-    private static void EnsureLength(string text, int maximum, string name)
-    {
-        if (text.Length > maximum)
-        {
-            throw new ArgumentException($"The {name} exceeds the configured limit of {maximum} characters. " +
-                "Increase the corresponding Minutes limit together with Llm:ContextSize; input is never truncated.", name);
-        }
     }
 }

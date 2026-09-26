@@ -20,8 +20,15 @@ public sealed record MinutesVerification
     /// </summary>
     public int DiscardedFindings { get; init; }
 
-    /// <summary>No discrepancies were reported by the model; not a guarantee of factual correctness.</summary>
-    public bool IsConsistent => Completed && Findings.Count == 0 && DiscardedFindings == 0;
+    /// <summary>
+    /// Checked fragment by fragment (a long transcript): contradictions, misattributions and omissions
+    /// were checked, claims with no support anywhere in the transcript (Unsupported) were not. Such a
+    /// document is never reported as consistent, even without findings.
+    /// </summary>
+    public bool Partial { get; init; }
+
+    /// <summary>No discrepancies were reported by a full check; not a guarantee of factual correctness.</summary>
+    public bool IsConsistent => Completed && !Partial && Findings.Count == 0 && DiscardedFindings == 0;
 }
 
 public sealed record MinutesDiscrepancy

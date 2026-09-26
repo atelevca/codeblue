@@ -35,11 +35,7 @@
         "Llm__GpuLayerCount": "999",
         "Llm__ContextSize": "32768",
         "Llm__MaxTokens": "4096",
-        "Minutes__MaxTranscriptCharacters": "55000",
-        "Minutes__MaxFactsCharacters": "20000",
-        "Minutes__MaxVerificationCharacters": "65000",
         "Minutes__ExtractionMaxTokens": "4096",
-        "Minutes__GenerationMaxTokens": "4096",
         "Minutes__VerificationMaxTokens": "4096"
       }
     }

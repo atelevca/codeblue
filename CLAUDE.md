@@ -107,8 +107,8 @@ missing.
   transcripts folder instead, and the save step deletes it.
 - The three slow steps report progress inside their own band, so the bar keeps moving:
   `"Распознавание: чанк 3 из 7"` (15–55%), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
-  `"Генерация протокола: ..."` by phase — extracting facts (92%), writing the document (94%), checking it
-  against the transcript (98%).
+  `"Генерация протокола: ..."` by phase — extracting facts per fragment (92–95%), merging fragments (95%),
+  the document (96%), checking it against the transcript per fragment (96–99%).
 - `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
   `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes.
   A minutes failure is logged as a warning and the job still completes: the transcript is the result,
@@ -178,11 +178,12 @@ missing.
 - Fully offline: Semantic Kernel + LLamaSharp 0.27.0 (`LLamaSharp.Backend.Cpu`; all LLamaSharp packages must share one version) running a GGUF model in-process. The model `models/qwen2.5-7b-instruct-q4_k_m.gguf` must be placed manually and is never downloaded; `LlmOptions.ResolveModelPath` walks up from the output dir until `Llm:ModelsDirectory` (`../models`) exists.
 - Settings: `SemanticKernel/appsettings.llm.json` (copied to output with `Prompts/` and `Glossary/`) gives defaults for the `Llm` section; the app's own config/env vars (`Llm__*`) override.
 - `KernelFactory` (singleton) checks the model path in its constructor (missing → `LlmModelNotFoundException` → 503 via `LlmModelNotFoundExceptionHandler`, before any transcription work) but loads the weights only on first use. The chat prompt uses the model's own chat template (`PromptTemplateTransformer`).
+- `KernelFactory` is also the `ITokenCounter`: it counts with the GGUF tokenizer, rendering prompts through the same chat template. Every LLM request is sized in real tokens against `Llm:ContextSize` (`TokenBudget`), never in characters. On first load it checks that the context fits the largest `Prompts/*.system.txt`, the largest reply and a 1000-token window; otherwise `LlmConfigurationException` (503, same handler).
 - `CorrectTermsStep` corrects the aligned turns (turn index + 1 = segment id) and saves
   `<transcripts>/<jobId>/<name>.medical_corrections.md`. The system prompt and glossaries come from the
   job's profile (`RecordProfileContent`), not from hard-coded file names.
 - `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
-- `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
+- `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (a batch closes on real token size — the full request next to `Llm:MaxTokens`, and the echoed pieces within `Llm:MaxTokens` — or at `BatchSize`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
 - Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the batch text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` per file. The Moldova list is labelled as "NOT errors, keep as written".
 - Each piece in the request carries `lowConfidence` (omitted when empty, to save tokens); the system prompt
   tells the model to start with those words but treat them as a hint, not a restriction. `POST /audio/correctTranscript`
@@ -211,13 +212,16 @@ missing.
 - All checks live in `SpeakerBindingService`; the repositories are Dapper over `IDbConnectionFactory`.
 
 **Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
-from the speakers transcript, writes the minutes, and a verification pass checks them against the
-transcript. The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
+from the speakers transcript, the document is rendered in code from them (`MinutesRenderer`, no model call),
+and a verification pass checks it against the transcript. A transcript of any length works: extraction and
+verification split it into token-sized windows of whole turns (`Minutes:MaxWindowTokens`, 4000), facts are
+merged in code and one small consolidation call groups repeated topics and writes the summary (details in
+`SemanticKernel/Minutes/README.md`; the whole long-recordings design — budgets, windows, `verification.partial`,
+settings, log lines — in `docs/long-recordings.md`). The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
 `GET /jobs/{id}/transcript`), and the record title plus the bound persons go along as `metadata`. The
 facts (`MeetingFacts`, snake_case JSON) have the shape of the document: header, participants, agenda,
-decisions/actions/open issues with an `agenda_id`, next meeting, summary. The generated Markdown must
-carry the template headings in order; the agenda list and the three tables are rendered in code from
-the facts, never taken from the model. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
+decisions/actions/open issues with an `agenda_id`, next meeting, summary. The Markdown follows the stage 2 template
+(headings, order, fixed texts) of commit `3172c27`. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
 each with an optional `section`. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
 PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
 Linux (`Documents:FontDirectory` overrides). The PDF carries the Medpark letterhead taken from

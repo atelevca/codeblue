@@ -42,14 +42,14 @@ public sealed class DocumentService(
     /// после того как протокол сохранён.
     /// </summary>
     public async Task<SavedDocument> GenerateAsync(
-        Guid jobId, IProgress<DocumentPhase>? phase = null, CancellationToken ct = default)
+        Guid jobId, IProgress<DocumentProgress>? progress = null, CancellationToken ct = default)
     {
         var job = await RequireJobAsync(jobId, ct);
-        return await SaveCoreAsync(job, null, phase, ct);
+        return await SaveCoreAsync(job, null, progress, ct);
     }
 
     private async Task<SavedDocument> SaveCoreAsync(
-        Job job, SaveDocumentRequest? request, IProgress<DocumentPhase>? phase, CancellationToken ct)
+        Job job, SaveDocumentRequest? request, IProgress<DocumentProgress>? progress, CancellationToken ct)
     {
         var jobId = job.Id;
         if (request != null && request.Delta == null)
@@ -62,6 +62,7 @@ public sealed class DocumentService(
         {
             var transcript = await ReadTranscriptAsync(jobId, ct);
             var metadata = await ReadMetadataAsync(job, ct);
+            var minutesProgress = progress == null ? null : new MinutesProgressRelay(progress);
             string markdown;
             QuillDelta delta;
             MinutesVerification verification;
@@ -69,9 +70,8 @@ public sealed class DocumentService(
             {
                 if (request == null)
                 {
-                    phase?.Report(DocumentPhase.ExtractingFacts);
-                    var facts = await generator.Value.ExtractFactsAsync(transcript, metadata, ct);
-                    phase?.Report(DocumentPhase.Generating);
+                    var facts = await generator.Value.ExtractFactsAsync(transcript, metadata, minutesProgress, ct);
+                    progress?.Report(new DocumentProgress(DocumentPhase.Generating));
                     var generated = await generator.Value.GenerateMinutesAsync(facts, ct);
                     delta = QuillDocument.FromMarkdown(generated);
                     markdown = QuillDocument.ToMarkdown(delta);
@@ -81,8 +81,7 @@ public sealed class DocumentService(
                     delta = request.Delta;
                     markdown = editedMarkdown!;
                 }
-                phase?.Report(DocumentPhase.Verifying);
-                verification = await VerifyOrNoteAsync(transcript, markdown, metadata, ct);
+                verification = await VerifyOrNoteAsync(transcript, markdown, metadata, minutesProgress, ct);
             }
             catch (ArgumentException ex)
             {
@@ -120,11 +119,11 @@ public sealed class DocumentService(
     /// счёта. Документ сохраняется как есть, а несостоявшаяся сверка помечается явно.
     /// </summary>
     private async Task<MinutesVerification> VerifyOrNoteAsync(
-        string transcript, string markdown, MeetingMetadata? metadata, CancellationToken ct)
+        string transcript, string markdown, MeetingMetadata? metadata, IProgress<MinutesProgress>? progress, CancellationToken ct)
     {
         try
         {
-            return await generator.Value.VerifyMinutesAsync(transcript, markdown, metadata, ct);
+            return await generator.Value.VerifyMinutesAsync(transcript, markdown, metadata, progress, ct);
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or ArgumentException or DocumentException))
         {
@@ -231,5 +230,16 @@ public sealed class DocumentService(
         return title == null && participants.Length == 0
             ? null
             : new MeetingMetadata { Title = title, Participants = participants };
+    }
+
+    // Синхронная пересылка: Progress<T> из шага и так уводит доклад в пул потоков.
+    private sealed class MinutesProgressRelay(IProgress<DocumentProgress> target) : IProgress<MinutesProgress>
+    {
+        public void Report(MinutesProgress value) => target.Report(new DocumentProgress(value.Stage switch
+        {
+            MinutesStage.Extracting => DocumentPhase.ExtractingFacts,
+            MinutesStage.Consolidating => DocumentPhase.Consolidating,
+            _ => DocumentPhase.Verifying
+        }, value.Current, value.Total));
     }
 }

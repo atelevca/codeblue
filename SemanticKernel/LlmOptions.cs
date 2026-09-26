@@ -24,14 +24,8 @@ namespace SemanticKernel
 
         public int MaxTokens { get; set; } = 2048;
 
-        /// <summary>Max segments per LLM request.</summary>
+        /// <summary>Max pieces per LLM request; batches also close on real token size (context and reply).</summary>
         public int BatchSize { get; set; } = 15;
-
-        /// <summary>
-        /// Max total text length per LLM request; a batch is closed earlier when it would exceed this,
-        /// so the corrected JSON fits into <see cref="MaxTokens"/>. A single longer segment is sent alone.
-        /// </summary>
-        public int MaxBatchCharacters { get; set; } = 4000;
 
         /// <summary>
         /// Longer segment texts are split into pieces of whole sentences up to this length; each piece is sent,

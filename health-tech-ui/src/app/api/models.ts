@@ -124,6 +124,11 @@ export interface MinutesVerification {
    * document); they are not returned. Above zero, `isConsistent` is false even with empty `findings`.
    */
   discardedFindings: number;
+  /**
+   * Long transcript checked fragment by fragment: claims without support anywhere in the transcript
+   * were not checked, so `isConsistent` is false even with no findings. Absent in older documents.
+   */
+  partial?: boolean;
   isConsistent: boolean;
 }
 

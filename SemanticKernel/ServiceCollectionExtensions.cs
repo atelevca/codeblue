@@ -25,6 +25,7 @@ namespace SemanticKernel
             services.AddOptions<MinutesOptions>().Bind(merged.GetSection(MinutesOptions.SectionName));
             services.AddSingleton<KernelFactory>();
             services.AddSingleton<IChatCompletionProvider>(sp => sp.GetRequiredService<KernelFactory>());
+            services.AddSingleton<ITokenCounter>(sp => sp.GetRequiredService<KernelFactory>());
             services.AddSingleton<IMedicalTermCorrector, MedicalTermCorrector>();
             services.AddSingleton<IMeetingMinutesGenerator, MeetingMinutesGenerator>();
             return services;
