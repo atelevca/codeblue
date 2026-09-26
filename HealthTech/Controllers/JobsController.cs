@@ -7,8 +7,12 @@ namespace HealthTech.Controllers
     [Route("[controller]")]
     public class JobsController : ControllerBase
     {
-        // POST /jobs временно отсутствует: старая однофазная загрузка убрана вместе с
-        // CreateAsync, оформление записи добавляется следующей задачей плана.
+        [HttpPost]
+        public Task<Job> Save(
+            [FromBody] SaveRecordRequest request,
+            [FromServices] IJobService jobService,
+            CancellationToken cancellationToken) =>
+            jobService.SaveRecordAsync(request, cancellationToken);
 
         [HttpGet]
         public Task<IReadOnlyList<Job>> List(
@@ -31,6 +35,4 @@ namespace HealthTech.Controllers
             return result is null ? NotFound() : Content(result, "application/json");
         }
     }
-
-    public record JobCreated(Guid JobId);
 }
