@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Downloads every model HealthTech needs into ./models (the "../models" path in HealthTech/appsettings.json).
+# Downloads every model HealthTech needs into ./models (the "../models" path in HealthTech/appsettings.json),
+# including the two GGUF files of the local LLM (Qwen2.5 3B for term correction, 7B for the minutes).
 # Already downloaded files are skipped; interrupted downloads resume.
 set -euo pipefail
 
@@ -9,6 +10,7 @@ cd models
 
 SHERPA=https://github.com/k2-fsa/sherpa-onnx/releases/download
 WHISPER=https://huggingface.co/ggerganov/whisper.cpp/resolve/main
+QWEN=https://huggingface.co/Qwen
 
 fetch() { # <file name> <url>
     if [[ -s "$1" ]]; then
@@ -45,6 +47,10 @@ else
         | tar -xjO sherpa-onnx-pyannote-segmentation-3-0/model.onnx > pyannote-segmentation-3.0.onnx.partial
     mv pyannote-segmentation-3.0.onnx.partial pyannote-segmentation-3.0.onnx
 fi
+
+# Local LLM (LLamaSharp). 3B (2.1 GB) corrects terms, 7B (4.7 GB) extracts and verifies the minutes.
+fetch qwen2.5-3b-instruct-q4_k_m.gguf "$QWEN/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf"
+fetch qwen2.5-7b-instruct-q4_k_m.gguf "$QWEN/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf"
 
 echo
 ls -lh

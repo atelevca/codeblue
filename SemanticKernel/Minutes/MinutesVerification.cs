@@ -14,6 +14,14 @@ public sealed record MinutesVerification
     public bool Completed { get; init; } = true;
 
     /// <summary>
+    /// True while the verification is still queued or running in the background. The pipeline saves
+    /// the minutes as soon as they are rendered and verifies them after the job is Completed, so the
+    /// document reaches the user minutes earlier; a client polls <c>GET /document/get</c> until this
+    /// turns false. <see cref="Completed"/> is false while pending.
+    /// </summary>
+    public bool Pending { get; init; }
+
+    /// <summary>
     /// Находки, отброшенные при проверке: цитата не нашлась в источнике даже после
     /// нормализации пробелов, регистра и диакритики, либо не хватало обязательных полей.
     /// Модель что-то нашла, но доказать не смогла, поэтому такой документ не считается сверенным.
@@ -22,6 +30,15 @@ public sealed record MinutesVerification
 
     /// <summary>No discrepancies were reported by the model; not a guarantee of factual correctness.</summary>
     public bool IsConsistent => Completed && Findings.Count == 0 && DiscardedFindings == 0;
+
+    /// <summary>The placeholder saved with the document until the background verification replaces it.</summary>
+    public static MinutesVerification CreatePending() => new()
+    {
+        Completed = false,
+        Pending = true,
+        Summary = "Verificarea automată este în curs.",
+        Findings = []
+    };
 }
 
 public sealed record MinutesDiscrepancy

@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using LLamaSharp.SemanticKernel;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -14,7 +16,7 @@ namespace SemanticKernel.MedicalCorrection
     /// corrections that pass <see cref="CorrectionValidator"/>. Only piece ids and texts are sent, never speakers
     /// or timestamps.
     /// </summary>
-    public class MedicalTermCorrector : IMedicalTermCorrector
+    public partial class MedicalTermCorrector : IMedicalTermCorrector
     {
         // Context pieces only help the model understand the topic; long ones are cut to their end.
         private const int MaxContextPieceLength = 400;
@@ -30,7 +32,9 @@ namespace SemanticKernel.MedicalCorrection
         private readonly ILogger<MedicalTermCorrector> _logger;
         private readonly SemaphoreSlim _runLock = new(1, 1);
 
-        public MedicalTermCorrector(IChatCompletionProvider chatProvider, IOptions<LlmOptions> options, ILogger<MedicalTermCorrector> logger)
+        public MedicalTermCorrector(
+            [FromKeyedServices(LlmModelRole.Correction)] IChatCompletionProvider chatProvider,
+            IOptions<LlmOptions> options, ILogger<MedicalTermCorrector> logger)
         {
             _chatProvider = chatProvider;
             _options = options.Value;
@@ -179,7 +183,10 @@ namespace SemanticKernel.MedicalCorrection
             return batches;
         }
 
-        // Returns id -> corrected text, or null when the model never produced a usable answer for the batch.
+        // Returns id -> corrected text for the pieces the model changed (possibly none), or null when the
+        // model never produced a usable answer for the batch. The model returns only changed pieces: echoing
+        // every piece back costs ~1,000 output tokens per batch on the CPU, most of them for text that did
+        // not change.
         private async Task<Dictionary<int, string>?> RequestCorrectionsAsync(
             IChatCompletionService chat, RecordProfileContent profile, IReadOnlyList<Piece> context,
             IReadOnlyList<Piece> batch, int batchNumber, CancellationToken ct)
@@ -216,10 +223,12 @@ namespace SemanticKernel.MedicalCorrection
                     continue;
                 }
 
+                // A subset of the batch ids, each at most once. An unknown or repeated id means the model
+                // lost track of the input, and its texts cannot be trusted to belong where it says.
                 var ids = parsed.Select(s => s.Id).ToList();
-                if (ids.Count != expectedIds.Count || !expectedIds.SetEquals(ids))
+                if (ids.Count != ids.Distinct().Count() || !ids.All(expectedIds.Contains))
                 {
-                    _logger.LogWarning("Medical correction batch {Batch}, attempt {Attempt}/{Attempts}: ids [{Ids}] don't match [{ExpectedIds}]",
+                    _logger.LogWarning("Medical correction batch {Batch}, attempt {Attempt}/{Attempts}: ids [{Ids}] are not a subset of [{ExpectedIds}]",
                         batchNumber, attempt, attempts, string.Join(", ", ids), string.Join(", ", expectedIds));
                     continue;
                 }
@@ -246,7 +255,11 @@ namespace SemanticKernel.MedicalCorrection
 
             // "\n" rather than AppendLine: the prompt shouldn't depend on the OS line ending.
             var builder = new StringBuilder(JsonSerializer.Serialize(request, RequestJsonOptions));
-            var texts = batch.Select(p => p.Text).ToList();
+            // Glossary lines are chosen by the low-confidence words only (with their neighbours, for split
+            // terms), not by the whole batch text: matching every word pulled in up to 2,000 characters per
+            // list - the ICD-10 one above all - for words the recognizer was sure about. A batch without
+            // low-confidence words gets no reference lines at all.
+            var texts = batch.SelectMany(LowConfidenceWindows).ToList();
             foreach (var glossary in profile.Glossaries)
             {
                 var lines = glossary.Select(texts, _options.MaxGlossaryCharacters);
@@ -260,6 +273,50 @@ namespace SemanticKernel.MedicalCorrection
 
         private static string Tail(string text, int maxLength) =>
             text.Length <= maxLength ? text : "…" + text[^maxLength..];
+
+        // For each low-confidence word: the words of the piece it overlaps plus one word on each side,
+        // so a term the recognizer split in two ("аторва статин") still shares a glued key with its line.
+        private static IEnumerable<string> LowConfidenceWindows(Piece piece)
+        {
+            if (piece.LowConfidence.Count == 0)
+            {
+                yield break;
+            }
+
+            var words = Words().Matches(piece.Text);
+            foreach (var word in piece.LowConfidence)
+            {
+                var start = word.At;
+                var end = word.At + word.Word.Length;
+                var first = -1;
+                var last = -1;
+                for (var i = 0; i < words.Count; i++)
+                {
+                    if (words[i].Index < end && words[i].Index + words[i].Length > start)
+                    {
+                        if (first < 0)
+                        {
+                            first = i;
+                        }
+                        last = i;
+                    }
+                }
+
+                if (first < 0)
+                {
+                    // The offset points nowhere in this text (a stale flag): the word itself still counts.
+                    yield return word.Word;
+                    continue;
+                }
+
+                first = Math.Max(0, first - 1);
+                last = Math.Min(words.Count - 1, last + 1);
+                yield return string.Join(' ', Enumerable.Range(first, last - first + 1).Select(i => words[i].Value));
+            }
+        }
+
+        [GeneratedRegex(@"\p{L}+")]
+        private static partial Regex Words();
 
         private string Apply(Piece piece, Dictionary<int, string>? corrections, CorrectionLog log)
         {

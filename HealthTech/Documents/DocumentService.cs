@@ -2,15 +2,19 @@ using System.Text.Json;
 using HealthTech.Audio;
 using HealthTech.Jobs;
 using HealthTech.Speakers;
+using HealthTech.Transcription;
+using Microsoft.Extensions.Options;
 using SemanticKernel.Minutes;
 
 namespace HealthTech.Documents;
 
 public sealed class DocumentService(
-    IJobRepository jobs, IJobPaths paths, Lazy<IMeetingMinutesGenerator> generator,
+    IJobRepository jobs, IJobPaths paths, IOptions<TranscriptsOptions> transcripts,
+    Lazy<IMeetingMinutesGenerator> generator, IMinutesVerificationQueue verifications,
     ISpeakerBindingService speakers, ISpeakerBindingRepository bindings, IPersonRepository persons,
     IDocumentPdfRenderer pdf, ILogger<DocumentService> logger) : IDocumentService
 {
+    private const string DocumentFileName = "minutes.document.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     // Bounded lock set prevents concurrent saves for the same job without accumulating per-job locks.
     private readonly SemaphoreSlim[] _saveLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -18,44 +22,123 @@ public sealed class DocumentService(
     public async Task<SavedDocument> GetAsync(Guid jobId, CancellationToken ct = default)
     {
         await RequireJobAsync(jobId, ct);
-        var path = DocumentPath(jobId);
-        if (!File.Exists(path))
-            throw new DocumentException(404, "Documentul nu a fost salvat pentru acest job.");
-
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-        return await JsonSerializer.DeserializeAsync<SavedDocument>(stream, JsonOptions, ct)
-            ?? throw new DocumentException(500, "Documentul salvat nu poate fi citit.");
+        return await ReadDocumentAsync(jobId, ct)
+            ?? throw new DocumentException(404, "Documentul nu a fost salvat pentru acest job.");
     }
 
+    /// <summary>
+    /// The API entry ("the button"): regenerate without a body, or verify and save an edit. Both
+    /// verify synchronously - the caller asked for it and waits for the answer.
+    /// </summary>
     public async Task<SavedDocument> SaveAsync(Guid jobId, SaveDocumentRequest? request, CancellationToken ct = default)
     {
         var job = await RequireJobAsync(jobId, ct);
         if (job.Status != JobStatus.Completed)
             throw new DocumentException(409, "Transcrierea jobului nu este finalizată.");
-        return await SaveCoreAsync(job, request, null, ct);
+        return await SaveCoreAsync(job, request, verify: true, null, ct);
     }
 
     /// <summary>
-    /// Вход для шага конвейера. От SaveAsync отличается ровно одним: не требует статуса
-    /// Completed. На этом шаге задание ещё Running - в Completed его переводит сам шаг,
-    /// после того как протокол сохранён.
+    /// Вход для шага конвейера. От SaveAsync отличается двумя вещами: не требует статуса
+    /// Completed (на этом шаге задание ещё Running - в Completed его переводит сам шаг после
+    /// сохранения) и не сверяет. Сверка ставится в очередь и идёт после завершения задания:
+    /// она стоила 2-4 минуты на CPU и обе попытки нередко падали на точной цитате, а документ
+    /// к тому моменту давно готов.
     /// </summary>
     public async Task<SavedDocument> GenerateAsync(
         Guid jobId, IProgress<DocumentPhase>? phase = null, CancellationToken ct = default)
     {
         var job = await RequireJobAsync(jobId, ct);
-        return await SaveCoreAsync(job, null, phase, ct);
+        var document = await SaveCoreAsync(job, null, verify: false, phase, ct);
+        verifications.Enqueue(jobId);
+        return document;
     }
 
+    public async Task VerifyPendingAsync(Guid jobId, CancellationToken ct = default)
+    {
+        var job = await jobs.GetAsync(jobId, ct);
+        if (job == null)
+            return;
+
+        // Чтение под замком, модель - без него: сверка идёт минутами, и всё это время
+        // пользователь должен иметь возможность сохранить правку. Правка меняет SavedAt,
+        // и тогда результат старой сверки относится уже не к этому документу - он отбрасывается.
+        var gate = GateFor(jobId);
+        SavedDocument? document;
+        await gate.WaitAsync(ct);
+        try
+        {
+            document = await ReadDocumentAsync(jobId, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+        if (document == null || !document.Verification.Pending)
+            return;
+
+        var transcript = await ReadTranscriptAsync(jobId, ct);
+        var metadata = await ReadMetadataAsync(job, ct);
+        var verification = await VerifyOrNoteAsync(transcript, document.MinutesMarkdown, metadata, ct);
+
+        await gate.WaitAsync(ct);
+        try
+        {
+            var current = await ReadDocumentAsync(jobId, ct);
+            if (current == null || !current.Verification.Pending || current.SavedAt != document.SavedAt)
+            {
+                logger.LogInformation("Задание {JobId}: документ изменился во время сверки, результат отброшен", jobId);
+                return;
+            }
+            await WriteDocumentAsync(current with { Verification = verification }, ct);
+            logger.LogInformation("Задание {JobId}: протокол сверен ({Verification})", jobId, Describe(verification));
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<Guid>> FindPendingVerificationsAsync(CancellationToken ct = default)
+    {
+        var root = transcripts.Value.OutputFolder;
+        if (!Directory.Exists(root))
+            return [];
+
+        var pending = new List<Guid>();
+        foreach (var directory in Directory.EnumerateDirectories(root))
+        {
+            if (!Guid.TryParse(Path.GetFileName(directory), out var jobId) ||
+                !File.Exists(Path.Combine(directory, DocumentFileName)))
+                continue;
+            try
+            {
+                var document = await ReadDocumentAsync(jobId, ct);
+                if (document?.Verification.Pending == true)
+                    pending.Add(jobId);
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or DocumentException)
+            {
+                logger.LogWarning(ex, "Задание {JobId}: сохранённый протокол не читается, сверка не возобновлена", jobId);
+            }
+        }
+        return pending;
+    }
+
+    public static string Describe(MinutesVerification verification) =>
+        verification.Pending ? "в очереди"
+        : !verification.Completed ? "не выполнена"
+        : $"{verification.Findings.Count} расхождений, {verification.DiscardedFindings} отброшено";
+
     private async Task<SavedDocument> SaveCoreAsync(
-        Job job, SaveDocumentRequest? request, IProgress<DocumentPhase>? phase, CancellationToken ct)
+        Job job, SaveDocumentRequest? request, bool verify, IProgress<DocumentPhase>? phase, CancellationToken ct)
     {
         var jobId = job.Id;
         if (request != null && request.Delta == null)
             throw new DocumentException(400, "Delta este obligatoriu. Omiteți corpul cererii pentru generare.");
         var editedMarkdown = request == null ? null : QuillDocument.ToMarkdown(request.Delta);
 
-        var gate = _saveLocks[(int)((uint)jobId.GetHashCode() % (uint)_saveLocks.Length)];
+        var gate = GateFor(jobId);
         await gate.WaitAsync(ct);
         try
         {
@@ -70,9 +153,8 @@ public sealed class DocumentService(
                 {
                     phase?.Report(DocumentPhase.ExtractingFacts);
                     var facts = await generator.Value.ExtractFactsAsync(transcript, metadata, ct);
-                    phase?.Report(DocumentPhase.Generating);
-                    var generated = await generator.Value.GenerateMinutesAsync(facts, ct);
-                    delta = QuillDocument.FromMarkdown(generated);
+                    // Документ целиком рендерится из фактов в коде: второго вызова модели нет.
+                    delta = QuillDocument.FromMarkdown(generator.Value.RenderMinutes(facts));
                     markdown = QuillDocument.ToMarkdown(delta);
                 }
                 else
@@ -80,8 +162,16 @@ public sealed class DocumentService(
                     delta = request.Delta;
                     markdown = editedMarkdown!;
                 }
-                phase?.Report(DocumentPhase.Verifying);
-                verification = await VerifyOrNoteAsync(transcript, markdown, metadata, ct);
+
+                if (verify)
+                {
+                    phase?.Report(DocumentPhase.Verifying);
+                    verification = await VerifyOrNoteAsync(transcript, markdown, metadata, ct);
+                }
+                else
+                {
+                    verification = MinutesVerification.CreatePending();
+                }
             }
             catch (ArgumentException ex)
             {
@@ -89,20 +179,7 @@ public sealed class DocumentService(
             }
 
             var document = new SavedDocument(jobId, markdown, verification, DateTimeOffset.UtcNow, delta);
-            var path = DocumentPath(jobId);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(document, JsonOptions), ct);
-                ct.ThrowIfCancellationRequested();
-                File.Move(temporaryPath, path, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(temporaryPath))
-                    File.Delete(temporaryPath);
-            }
+            await WriteDocumentAsync(document, ct);
             return document;
         }
         finally
@@ -125,7 +202,7 @@ public sealed class DocumentService(
         {
             return await generator.Value.VerifyMinutesAsync(transcript, markdown, metadata, ct);
         }
-        catch (Exception ex) when (ex is not (OperationCanceledException or ArgumentException or DocumentException))
+        catch (Exception ex) when (ex is not (OperationCanceledException or DocumentException))
         {
             logger.LogWarning(ex, "Сверка протокола не удалась; документ сохранён без неё");
             return new MinutesVerification
@@ -150,7 +227,38 @@ public sealed class DocumentService(
     private async Task<Job> RequireJobAsync(Guid jobId, CancellationToken ct) =>
         await jobs.GetAsync(jobId, ct) ?? throw new DocumentException(404, "Jobul nu a fost găsit.");
 
-    private string DocumentPath(Guid jobId) => Path.Combine(paths.TranscriptsDirectory(jobId), "minutes.document.json");
+    private SemaphoreSlim GateFor(Guid jobId) => _saveLocks[(int)((uint)jobId.GetHashCode() % (uint)_saveLocks.Length)];
+
+    private string DocumentPath(Guid jobId) => Path.Combine(paths.TranscriptsDirectory(jobId), DocumentFileName);
+
+    private async Task<SavedDocument?> ReadDocumentAsync(Guid jobId, CancellationToken ct)
+    {
+        var path = DocumentPath(jobId);
+        if (!File.Exists(path))
+            return null;
+
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        return await JsonSerializer.DeserializeAsync<SavedDocument>(stream, JsonOptions, ct)
+            ?? throw new DocumentException(500, "Documentul salvat nu poate fi citit.");
+    }
+
+    private async Task WriteDocumentAsync(SavedDocument document, CancellationToken ct)
+    {
+        var path = DocumentPath(document.JobId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(document, JsonOptions), ct);
+            ct.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
 
     /// <summary>
     /// The dialogue with the bound doctors' names in place of "Speaker N" - the same text

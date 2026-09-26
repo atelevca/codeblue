@@ -1,6 +1,6 @@
 namespace SemanticKernel.Minutes;
 
-/// <summary>Limits for transcript-to-minutes generation and verification.</summary>
+/// <summary>Limits for transcript-to-minutes extraction and verification.</summary>
 public sealed class MinutesOptions
 {
     public const string SectionName = "Minutes";
@@ -11,18 +11,20 @@ public sealed class MinutesOptions
     /// </summary>
     public int MaxTranscriptCharacters { get; set; } = 6000;
 
-    /// <summary>Maximum serialized facts length passed to minutes generation.</summary>
-    public int MaxFactsCharacters { get; set; } = 8000;
-
     public int ExtractionMaxTokens { get; set; } = 3072;
-
-    public int GenerationMaxTokens { get; set; } = 3072;
 
     /// <summary>Maximum serialized combined transcript and final document length. Nothing is truncated.</summary>
     public int MaxVerificationCharacters { get; set; } = 14000;
 
     public int VerificationMaxTokens { get; set; } = 2048;
 
-    /// <summary>Additional attempts when a stage returns malformed or empty output.</summary>
+    /// <summary>Additional attempts when extraction returns malformed or empty output.</summary>
     public int MaxRetries { get; set; } = 1;
+
+    /// <summary>
+    /// Additional attempts for verification. 0 by default: a verification that failed once tends to fail the
+    /// same way again (the quotes are not exact), and each attempt costs minutes on the CPU while the
+    /// document itself is already done. The verification result is quality control, not the deliverable.
+    /// </summary>
+    public int VerificationMaxRetries { get; set; }
 }

@@ -36,7 +36,7 @@ The audio pipeline shells out to `ffprobe` and `ffmpeg`. They are **not bundled*
 
 ## External dependency: models
 
-Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` (CAM++ speaker embeddings; the heavier `wespeaker_en_voxceleb_resnet34_LM.onnx` gave the same turns and took 5× longer, so it is kept in the download script only as an alternative), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The medical-correction GGUF `qwen2.5-7b-instruct-q4_k_m.gguf` lives there too (see `Llm:ModelFile`).
+Transcription models are **not downloaded by the app** (`download-models.sh` at the repo root fetches all but the GGUF for a new machine) — they must already exist in `models/` at the repo root (gitignored): `ggml-large-v3.bin` (Whisper large-v3; turbo loops more on Romanian and is not used), `pyannote-segmentation-3.0.onnx` (pyannote segmentation 3.0), `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx` (CAM++ speaker embeddings; the heavier `wespeaker_en_voxceleb_resnet34_LM.onnx` gave the same turns and took 5× longer, so it is kept in the download script only as an alternative), `silero_vad.onnx` (VAD). Paths come from `Whisper:ModelPath`, `Diarization:*ModelPath` and `Vad:ModelPath`; `ValidateOnStart` validators make startup fail with the missing path. The two GGUF files live there too: `qwen2.5-3b-instruct-q4_k_m.gguf` for term correction (`Llm:ModelFile`) and `qwen2.5-7b-instruct-q4_k_m.gguf` for the minutes (`Llm:Minutes:ModelFile`); `download-models.sh` fetches both.
 
 ## Storage
 
@@ -90,7 +90,8 @@ missing.
   Kestrel default of 30 MB is smaller than a real recording.
 - `TranscriptionWorkflow` (version 4) runs eight steps, each a `JobStep`: normalize (5%) → prepare 16 kHz
   mono (10%) → VAD (15%) → recognize speech and speakers (75%) → align (78%) → correct terms (90%) → save
-  (92%) → generate minutes (100%). The number in brackets is the accumulated percent written to
+  (92%) → generate minutes (100%). The minutes step extracts facts and renders the document; the
+  verification against the transcript is **not** part of the step (see "Minutes of meeting"). The number in brackets is the accumulated percent written to
   `Jobs.Percent`. The version is bumped whenever the step chain changes, because old instances stay in
   `workflow.db`.
 - `RecognizeSpeechStep` runs Whisper and diarization **in parallel** (`Task.WhenAll`): they are independent,
@@ -104,12 +105,16 @@ missing.
 - The three slow steps report progress inside their own band, so the bar keeps moving:
   `"Распознавание: чанк 3 из 7"` (15–70%, the last 5% of the band is left for a diarization that
   outlives Whisper), `"Коррекция терминов: батч 2 из 5"` (78–90%) and
-  `"Генерация протокола: ..."` by phase — extracting facts (92%), writing the document (94%), checking it
-  against the transcript (98%).
+  `"Генерация протокола: извлечение фактов"` (92%; the document itself is rendered in code, no phase).
 - `GenerateMinutesStep` is the step that sets `Completed` (`CompletesJob`). It calls
-  `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes.
-  A minutes failure is logged as a warning and the job still completes: the transcript is the result,
-  the minutes are derived from it and can be regenerated with `POST /document/save/{jobId}`.
+  `IDocumentService.GenerateAsync`, which skips the `Completed` check that `POST /document/save` makes
+  and does not verify: it saves the document with `verification.pending = true` and puts the job id on
+  `MinutesVerificationQueue`; `MinutesVerificationWorker` (a `BackgroundService`) verifies it after the
+  job is already `Completed` and writes the result into `minutes.document.json`, unless the document was
+  re-saved meanwhile (`SavedAt` changed → the stale result is dropped). On startup the worker re-queues
+  every saved document still marked pending. A minutes failure is logged as a warning and the job still
+  completes: the transcript is the result, the minutes are derived from it and can be regenerated with
+  `POST /document/save/{jobId}`.
 - A failing step puts the job in `Failed` with the message and lets the chain run out; later steps see
   `Failed` and do nothing. There is no automatic retry — the steps are far too expensive for one.
 - `JobStep` checks `Failed` **before** its first progress report, and `UpdateProgressAsync` only raises
@@ -174,15 +179,35 @@ missing.
 - `Diarization:ExclusiveSegments` makes speaker turns non-overlapping (shorter turn wins); without it, bridged long turns swallow the other speaker.
 
 **Medical term correction** (`SemanticKernel/` project, registered with `AddMedicalTermCorrection(configuration)` in `Program.cs`):
-- Fully offline: Semantic Kernel + LLamaSharp 0.27.0 (`LLamaSharp.Backend.Cpu`; all LLamaSharp packages must share one version) running a GGUF model in-process. The model `models/qwen2.5-7b-instruct-q4_k_m.gguf` must be placed manually and is never downloaded; `LlmOptions.ResolveModelPath` walks up from the output dir until `Llm:ModelsDirectory` (`../models`) exists.
-- Settings: `SemanticKernel/appsettings.llm.json` (copied to output with `Prompts/` and `Glossary/`) gives defaults for the `Llm` section; the app's own config/env vars (`Llm__*`) override.
-- `KernelFactory` (singleton) checks the model path in its constructor (missing → `LlmModelNotFoundException` → 503 via `LlmModelNotFoundExceptionHandler`, before any transcription work) but loads the weights only on first use. The chat prompt uses the model's own chat template (`PromptTemplateTransformer`).
+- Fully offline: Semantic Kernel + LLamaSharp 0.27.0 running GGUF models in-process. Backends:
+  `LLamaSharp.Backend.Vulkan` (Intel Arc) plus `LLamaSharp.Backend.Cpu` as the fallback LLamaSharp picks
+  itself when no Vulkan device works; all LLamaSharp packages must share one version. The models are never
+  downloaded by the app; `LlmOptions.ResolveModelPath` walks up from the output dir until `Llm:ModelsDirectory` (`../models`) exists.
+- **Two models, two roles** (`LlmModelRole`): `Llm:ModelFile` = Qwen2.5-**3B** q4_k_m for term correction
+  (many short, narrow requests; `CorrectionValidator` catches what a small model breaks; ~2.5× faster than 7B),
+  `Llm:Minutes:ModelFile` = Qwen2.5-**7B** q4_k_m for fact extraction and verification (one long request each).
+  `Llm:Minutes:*` (`ModelFile`, `ContextSize`, `GpuLayerCount`) fall back field by field to the top-level
+  values, so an empty section means one shared model. DI registers `KernelFactory`/`IChatCompletionProvider`
+  keyed by role (`[FromKeyedServices(LlmModelRole.Correction)]` in `MedicalTermCorrector`, `Minutes` in
+  `MeetingMinutesGenerator`); the same file for both roles yields one factory, so the weights load once.
+- **GPU**: `Llm:GpuLayerCount` / `Llm:Minutes:GpuLayerCount` offload that many layers via Vulkan to the device
+  `GGML_VK_VISIBLE_DEVICES` exposes, the same one Whisper uses. **Both are 0 on Windows on purpose.** Measured on
+  the 2-minute sample (Release build): 12 layers of the 3B took 1.6 GB of the A370M's 4 GB next to Whisper
+  large-v3, the process spilled into shared memory and Whisper went from 43 s to 123 s while the correction
+  batch only went from 62 s to 41 s — a net loss of a minute. Offload pays off only if Whisper leaves room
+  (a quantized `ggml-large-v3-q5_0` or a different GPU); re-measure the whole pipeline, not the LLM step
+  alone. The mac profile sets `Llm__GpuLayerCount=999` (Metal, unified memory).
+- Settings: `SemanticKernel/appsettings.llm.json` (copied to output with `Prompts/` and `Glossary/`) gives defaults for the `Llm` section; the app's own config/env vars (`Llm__*`, `Llm__Minutes__ModelFile`) override.
+- `KernelFactory` (one per role) checks the model path in its constructor (missing → `LlmModelNotFoundException` → 503 via `LlmModelNotFoundExceptionHandler`, before any transcription work) but loads the weights only on first use. The chat prompt uses the model's own chat template (`PromptTemplateTransformer`).
 - `CorrectTermsStep` corrects the aligned turns (turn index + 1 = segment id) and saves
   `<transcripts>/<jobId>/<name>.medical_corrections.md`. The system prompt and glossaries come from the
   job's profile (`RecordProfileContent`), not from hard-coded file names.
 - `ITranscriptCorrectionService` (`POST /audio/correctTranscript?jobId=...&fileName=...&profile=...`), resolving the file inside that job's `transcripts/<jobId>/` runs the same correction on an existing file in `transcripts/` (`turns` or `segments` with `text`; `.json` may be omitted; only a bare file name is accepted, bad/diarization-only JSON → `InvalidTranscript` 422). Writes `<name>.corrected.json` (source JSON with only texts changed; the dialogue `text` of a speakers file is rebuilt) and `<name>.medical_corrections.md`.
 - `MedicalTermCorrector` cuts each segment into sentence pieces (`TextPieces`, ≤ `MaxPieceCharacters`; pieces cover the text exactly, so an unchanged segment comes back byte-identical), batches pieces (`BatchSize`, `MaxBatchCharacters`), sends only id+text plus previous pieces as context, retries unparseable/mismatched output (`MaxRetries`) and otherwise keeps the originals. Validation and the log are per piece.
-- Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the batch text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` per file. The Moldova list is labelled as "NOT errors, keep as written".
+- **The model returns only the pieces it changed** (`[]` when nothing changed); the prompts say so and
+  `RequestCorrectionsAsync` accepts any subset of the batch ids (no unknown id, no duplicate). Echoing the
+  whole batch back cost ~1,000 output tokens per batch on the CPU for text that mostly did not change.
+- Glossaries (`Glossary/medical_glossary.txt`, `Glossary/moldova_speech_glossary.txt`; `term | term | English` lines, `#` = comment) are far bigger than the context, so `Glossary.Select` adds per request only lines whose words share 5-letter, diacritics-free prefixes with the query text (adjacent words glued too, for split terms; the last English column is not searched), rarer matches first, up to `MaxGlossaryCharacters` (1,000) per file. The query text is **not the whole batch**: it is the low-confidence words of the batch, each with one neighbouring word on either side (`LowConfidenceWindows`), so a batch without low-confidence words gets no reference lines at all. Matching the whole text pulled in 2,000 characters per list, the ICD-10 one above all, for words Whisper was sure about. The Moldova list is labelled as "NOT errors, keep as written".
 - Each piece in the request carries `lowConfidence` (omitted when empty, to save tokens); the system prompt
   tells the model to start with those words but treat them as a hint, not a restriction. `POST /audio/correctTranscript`
   reads the same field from the file, so a re-run sees what the pipeline saw; files without it still work.
@@ -210,13 +235,19 @@ missing.
 - All checks live in `SpeakerBindingService`; the repositories are Dapper over `IDbConnectionFactory`.
 
 **Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
-from the speakers transcript, writes the minutes, and a verification pass checks them against the
-transcript. The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
+from the speakers transcript, the document is rendered from them in code, and a verification pass checks
+it against the transcript. The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
 `GET /jobs/{id}/transcript`), and the record title plus the bound persons go along as `metadata`. The
 facts (`MeetingFacts`, snake_case JSON) have the shape of the document: header, participants, agenda,
-decisions/actions/open issues with an `agenda_id`, next meeting, summary. The generated Markdown must
-carry the template headings in order; the agenda list and the three tables are rendered in code from
-the facts, never taken from the model. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
+decisions/actions/open issues with an `agenda_id`, next meeting, summary. **There is no "write the
+minutes" model call**: `RenderMinutes` builds the whole Markdown (header, participants, agenda, course
+of the meeting, the three tables, next meeting, summary, signatures) from the normalized facts. That call
+used to cost ~96 s of 7B on the CPU and added nothing the facts did not hold. The verification runs
+**after** the job is `Completed`, in the background (see the jobs section), with
+`Minutes:VerificationMaxRetries` = 0: a failed verification tends to fail the same way again and each
+attempt costs minutes. `POST /document/save/{jobId}` (regenerate or save an edit) still verifies
+synchronously — that is the "button". `GET /document/get` returns `verification.pending = true` until
+the background pass has written its result. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
 each with an optional `section`. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
 PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
 Linux (`Documents:FontDirectory` overrides). The PDF carries the Medpark letterhead taken from

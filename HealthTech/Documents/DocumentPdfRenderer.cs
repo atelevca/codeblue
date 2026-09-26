@@ -108,7 +108,9 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
 
             // Несостоявшаяся сверка - это не "расхождений нет": в PDF она должна быть
             // видна отдельной строкой, иначе непроверенный документ выглядит проверенным.
-            var status = section.AddParagraph(!saved.Verification.Completed
+            var status = section.AddParagraph(saved.Verification.Pending
+                ? "Verificare automată: în curs - documentul necesită revizuire manuală până la finalizarea ei."
+                : !saved.Verification.Completed
                 ? "Verificare automată: nefinalizată - documentul necesită revizuire manuală."
                 : saved.Verification.IsConsistent
                     ? "Verificare automată: fără discrepanțe raportate."

@@ -104,6 +104,10 @@ builder.Services.AddSingleton(sp => new Lazy<SemanticKernel.Minutes.IMeetingMinu
     () => sp.GetRequiredService<SemanticKernel.Minutes.IMeetingMinutesGenerator>()));
 builder.Services.AddSingleton<IDocumentPdfRenderer, DocumentPdfRenderer>();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
+// Сверка протокола идёт в фоне после завершения задания, а не внутри последнего шага.
+builder.Services.AddSingleton<MinutesVerificationQueue>();
+builder.Services.AddSingleton<IMinutesVerificationQueue>(sp => sp.GetRequiredService<MinutesVerificationQueue>());
+builder.Services.AddHostedService<MinutesVerificationWorker>();
 
 // Прикладная база (Dapper). Путь относительный — резолвится от content root, как остальные.
 var appDatabasePath = Path.GetFullPath(

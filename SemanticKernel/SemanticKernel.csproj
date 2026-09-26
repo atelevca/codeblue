@@ -11,10 +11,12 @@
     <PackageReference Include="LLamaSharp" Version="0.27.0" />
     <PackageReference Include="LLamaSharp.semantic-kernel" Version="0.27.0" />
     <!--
-      CPU backend. For an NVIDIA GPU, replace it with LLamaSharp.Backend.Cuda12 (same version, CUDA 12 runtime
-      required) and set Llm:GpuLayerCount (e.g. -1 or 99 = all layers) in appsettings.llm.json.
+      Vulkan backend (Intel Arc / any Vulkan GPU) with the CPU backend as the fallback LLamaSharp picks on its
+      own when no Vulkan device is usable. Llm:GpuLayerCount says how many layers go to the GPU (0 = CPU only).
+      For an NVIDIA GPU, LLamaSharp.Backend.Cuda12 (same version, CUDA 12 runtime required) is the faster choice.
     -->
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Vulkan" Version="0.27.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.80.1" />

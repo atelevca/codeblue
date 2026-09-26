@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using LLamaSharp.SemanticKernel;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -25,30 +26,22 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    // Headings of the generation template, in order. The agenda list and everything between
-    // "## Decizii" and "## Următoarea ședință" are rendered from the facts, not taken from the model.
-    private static readonly string[] RequiredHeadings =
-    [
-        "# Proces-verbal al ședinței", "## Participanți", "## Ordinea de zi", "## Desfășurarea ședinței",
-        "## Decizii", "## Acțiuni", "## Probleme deschise", "## Următoarea ședință", "## Rezumat"
-    ];
-
     private readonly IChatCompletionProvider _chatProvider;
     private readonly MinutesOptions _options;
     private readonly ILogger<MeetingMinutesGenerator> _logger;
 
-    public MeetingMinutesGenerator(IChatCompletionProvider chatProvider, IOptions<MinutesOptions> options,
-        ILogger<MeetingMinutesGenerator> logger)
+    public MeetingMinutesGenerator(
+        [FromKeyedServices(LlmModelRole.Minutes)] IChatCompletionProvider chatProvider,
+        IOptions<MinutesOptions> options, ILogger<MeetingMinutesGenerator> logger)
     {
         _chatProvider = chatProvider;
         _options = options.Value;
         _logger = logger;
-        if (_options.MaxTranscriptCharacters <= 0 || _options.MaxFactsCharacters <= 0 ||
-            _options.ExtractionMaxTokens <= 0 || _options.GenerationMaxTokens <= 0 ||
+        if (_options.MaxTranscriptCharacters <= 0 || _options.ExtractionMaxTokens <= 0 ||
             _options.MaxVerificationCharacters <= 0 || _options.VerificationMaxTokens <= 0 ||
-            _options.MaxRetries is < 0 or > 10)
+            _options.MaxRetries is < 0 or > 10 || _options.VerificationMaxRetries is < 0 or > 10)
         {
-            throw new ArgumentException("Minutes limits must be positive and MaxRetries must be between 0 and 10.", nameof(options));
+            throw new ArgumentException("Minutes limits must be positive and the retry counts between 0 and 10.", nameof(options));
         }
     }
 
@@ -56,7 +49,7 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         CancellationToken ct = default)
     {
         var facts = await ExtractFactsAsync(transcript, metadata, ct);
-        var minutes = await GenerateMinutesAsync(facts, ct);
+        var minutes = RenderMinutes(facts);
         var verification = await VerifyMinutesAsync(transcript, minutes, metadata, ct);
         return new MeetingMinutesResult(facts, minutes, verification);
     }
@@ -78,7 +71,8 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         }
         // Verify the final rendered document against the source, not against potentially incomplete extracted facts.
         return RunStageAsync("Minutes Verification", "minutes_verification.system.txt", input,
-            _options.VerificationMaxTokens, response => ParseVerification(response, sources, minutesMarkdown), ct);
+            _options.VerificationMaxTokens, _options.VerificationMaxRetries,
+            response => ParseVerification(response, sources, minutesMarkdown), ct);
     }
 
     private static IEnumerable<string> MetadataValues(MeetingMetadata metadata)
@@ -255,46 +249,67 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         EnsureLength(transcript, _options.MaxTranscriptCharacters, "transcript");
         return await RunStageAsync("Fact Extraction and Summary", "minutes_extraction.system.txt",
             JsonSerializer.Serialize(new { transcript, metadata }, FactsJsonOptions), _options.ExtractionMaxTokens,
-            response => NormalizeFacts(JsonSerializer.Deserialize<MeetingFacts>(UnwrapFence(response), FactsJsonOptions)
+            _options.MaxRetries, response => NormalizeFacts(JsonSerializer.Deserialize<MeetingFacts>(UnwrapFence(response), FactsJsonOptions)
                 ?? throw new JsonException("Expected a facts object.")), ct);
     }
 
-    public Task<string> GenerateMinutesAsync(MeetingFacts facts, CancellationToken ct = default)
+    /// <summary>
+    /// The whole document comes from the facts, in code. The former second model call ("write the minutes
+    /// from these facts") added nothing the facts did not already hold - the agenda list and the tables were
+    /// rendered here anyway, and the header, participants, course, next meeting and summary are copied
+    /// fields - while costing about a minute and a half of 7B on the CPU per record.
+    /// </summary>
+    public string RenderMinutes(MeetingFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
-        var normalizedFacts = NormalizeFacts(facts);
-        var input = JsonSerializer.Serialize(normalizedFacts, FactsJsonOptions);
-        EnsureLength(input, _options.MaxFactsCharacters, "extracted facts");
-        // A fresh history contains only validated stage-one facts, never the transcript.
-        return RunStageAsync("Minutes Generation", "minutes_generation.system.txt", input,
-            _options.GenerationMaxTokens, response =>
-            {
-                var markdown = UnwrapFence(response);
-                var lines = markdown.Split('\n');
-                var previousIndex = -1;
-                foreach (var heading in RequiredHeadings)
-                {
-                    var indices = Enumerable.Range(0, lines.Length).Where(i => lines[i].Trim() == heading).ToArray();
-                    if (indices.Length != 1 || indices[0] <= previousIndex)
-                    {
-                        throw new FormatException($"Missing, duplicate or out-of-order minutes heading: {heading}");
-                    }
-                    previousIndex = indices[0];
-                }
-                // The agenda list, decisions, actions and open issues are rendered from the facts,
-                // with their agenda references. The second model may format prose, but cannot drop
-                // an item, move it to another agenda point or replace an unspecified owner/deadline
-                // with a guess. (On a short recording the model tends to keep the agenda note and
-                // skip the list itself.)
-                var agendaIndex = Array.FindIndex(lines, line => line.Trim() == "## Ordinea de zi");
-                var courseIndex = Array.FindIndex(lines, line => line.Trim() == "## Desfășurarea ședinței");
-                var decisionsIndex = Array.FindIndex(lines, line => line.Trim() == "## Decizii");
-                var nextMeetingIndex = Array.FindIndex(lines, line => line.Trim() == "## Următoarea ședință");
-                return string.Join('\n', lines.Take(agendaIndex)) + "\n\n" +
-                    RenderAgenda(normalizedFacts) + "\n\n" +
-                    string.Join('\n', lines.Skip(courseIndex).Take(decisionsIndex - courseIndex)) + "\n\n" +
-                    RenderTables(normalizedFacts) + "\n\n" + string.Join('\n', lines.Skip(nextMeetingIndex));
-            }, ct);
+        var normalized = NormalizeFacts(facts);
+        var meeting = normalized.Meeting!;
+        var participants = normalized.Participants!;
+
+        var builder = new StringBuilder();
+        builder.Append("# Proces-verbal al ședinței\n\n")
+            .Append("**Tema:** ").Append(meeting.Title).Append("\n\n")
+            .Append("**Data:** ").Append(meeting.Date)
+            .Append(" | **Ora:** ").Append(meeting.Time)
+            .Append(" | **Locul:** ").Append(meeting.Location).Append("\n\n");
+
+        builder.Append("## Participanți\n\n")
+            .Append("**Președinte:** ").Append(participants.Chair).Append("\n\n")
+            .Append("**Secretar:** ").Append(participants.Secretary).Append("\n\n")
+            .Append("**Prezenți:**").Append(RenderPresent(participants.Present!)).Append("\n\n")
+            .Append("**Absenți:**").Append(RenderAbsent(participants.Absent!)).Append("\n\n");
+
+        builder.Append(RenderAgenda(normalized)).Append("\n\n");
+        builder.Append(RenderCourse(normalized)).Append("\n\n");
+        builder.Append(RenderTables(normalized)).Append("\n\n");
+        builder.Append("## Următoarea ședință\n\n").Append(normalized.NextMeeting).Append("\n\n");
+        builder.Append("## Rezumat\n\n").Append(normalized.Summary).Append("\n\n");
+        builder.Append("## Semnături\n\n")
+            .Append("Președinte: ").Append(participants.Chair).Append(" ____________________\n\n")
+            .Append("Secretar: ").Append(participants.Secretary).Append(" ____________________\n");
+        return builder.ToString();
+    }
+
+    private static string RenderPresent(IReadOnlyList<MeetingParticipant> present) =>
+        present.Count == 0
+            ? " " + MeetingFacts.Unspecified
+            : "\n" + string.Join('\n', present.Select(person => $"- {person.Name} – {person.Role}"));
+
+    private static string RenderAbsent(IReadOnlyList<string> absent) =>
+        absent.Count == 0
+            ? " Nu au fost consemnați."
+            : "\n" + string.Join('\n', absent.Select(name => $"- {name}"));
+
+    // One sub-heading per agenda point with its discussion; without an agenda the summary stands in.
+    private static string RenderCourse(MeetingFacts facts)
+    {
+        var agenda = facts.Agenda!;
+        if (agenda.Count == 0)
+        {
+            return "## Desfășurarea ședinței\n\n" + facts.Summary;
+        }
+        var points = agenda.Select(item => $"### {item.Id}. {item.Topic}\n\n{item.Discussion}");
+        return "## Desfășurarea ședinței\n\n" + string.Join("\n\n", points);
     }
 
     private static string RenderAgenda(MeetingFacts facts)
@@ -355,14 +370,14 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
         .Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "<br>");
 
     private async Task<T> RunStageAsync<T>(string stage, string promptFile, string input, int maxTokens,
-        Func<string, T> parse, CancellationToken ct)
+        int maxRetries, Func<string, T> parse, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var prompt = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Prompts", promptFile), ct);
         var chat = await _chatProvider.GetChatCompletionAsync(ct);
         var settings = new LLamaSharpPromptExecutionSettings { Temperature = 0, MaxTokens = maxTokens };
         Exception? lastError = null;
-        for (var attempt = 0; attempt <= _options.MaxRetries; attempt++)
+        for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
             ct.ThrowIfCancellationRequested();
             var history = new ChatHistory(prompt);
@@ -389,13 +404,14 @@ public sealed class MeetingMinutesGenerator : IMeetingMinutesGenerator
                 _logger.LogWarning("MOM stage {Stage} returned invalid output on attempt {Attempt}: {Reason}", stage, attempt + 1, ex.Message);
             }
         }
-        throw new InvalidOperationException($"MOM stage '{stage}' failed after {_options.MaxRetries + 1} attempts.", lastError);
+        throw new InvalidOperationException($"MOM stage '{stage}' failed after {maxRetries + 1} attempt(s).", lastError);
     }
 
     /// <summary>
     /// Rejects a reply that lacks the lists or has empty entries, fills every missing text
     /// field with "Nespecificat", renumbers the agenda 1..n and drops agenda references that
-    /// point nowhere. A normalized object is what the generation prompt describes.
+    /// point nowhere. <see cref="RenderMinutes"/> reads only a normalized object, so it never
+    /// has to deal with a null field.
     /// </summary>
     private static MeetingFacts NormalizeFacts(MeetingFacts facts)
     {

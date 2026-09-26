@@ -20,26 +20,34 @@ namespace SemanticKernel
     }
 
     /// <summary>
-    /// Owns the local GGUF model (LLamaSharp, in-process, offline) and a Semantic Kernel <see cref="Kernel"/>
+    /// Owns one local GGUF model (LLamaSharp, in-process, offline) and a Semantic Kernel <see cref="Kernel"/>
     /// with <see cref="LLamaSharpChatCompletion"/> registered as <see cref="IChatCompletionService"/>.
+    /// One instance per <see cref="LlmModelRole"/>: the correction model and the minutes model may differ
+    /// (a 3B for the many short correction requests, the 7B for the two long minutes requests); when they are
+    /// the same file, DI hands both roles the same instance.
     /// The model path is checked in the constructor (fails fast with the expected path); the weights are loaded
-    /// once, on first use, so endpoints that never correct text don't pay for the multi-GB load.
+    /// once, on first use, so endpoints that never touch the LLM don't pay for the multi-GB load.
     /// </summary>
     public sealed class KernelFactory : IChatCompletionProvider, IDisposable
     {
         private readonly LlmOptions _options;
+        private readonly LlmModelSettings _model;
         private readonly ILogger<KernelFactory> _logger;
         private readonly SemaphoreSlim _loadLock = new(1, 1);
         private LLamaWeights? _weights;
         private Kernel? _kernel;
         private bool _disposed;
 
-        public KernelFactory(IOptions<LlmOptions> options, ILogger<KernelFactory> logger)
+        public KernelFactory(LlmModelRole role, IOptions<LlmOptions> options, ILogger<KernelFactory> logger)
         {
+            Role = role;
             _options = options.Value;
+            _model = _options.ModelFor(role);
             _logger = logger;
-            ModelPath = _options.ResolveModelPath(AppContext.BaseDirectory);
+            ModelPath = _options.ResolveModelPath(AppContext.BaseDirectory, _model.ModelFile);
         }
+
+        public LlmModelRole Role { get; }
 
         public string ModelPath { get; }
 
@@ -74,14 +82,17 @@ namespace SemanticKernel
 
             ForwardNativeLogs();
 
+            // With the Vulkan backend installed LLamaSharp picks it before the CPU one and falls back on its
+            // own when no Vulkan device is usable; GPU layers = 0 then simply keeps every layer on the CPU.
+            // The device is the one ggml sees first (GGML_VK_VISIBLE_DEVICES, shared with Whisper).
             var parameters = new ModelParams(ModelPath)
             {
-                ContextSize = _options.ContextSize,
-                GpuLayerCount = _options.GpuLayerCount
+                ContextSize = _model.ContextSize,
+                GpuLayerCount = _model.GpuLayerCount
             };
 
-            _logger.LogInformation("Loading LLM {ModelPath} (context {ContextSize}, GPU layers {GpuLayerCount})",
-                ModelPath, _options.ContextSize, _options.GpuLayerCount);
+            _logger.LogInformation("Loading {Role} LLM {ModelPath} (context {ContextSize}, GPU layers {GpuLayerCount})",
+                Role, ModelPath, _model.ContextSize, _model.GpuLayerCount);
             var stopwatch = Stopwatch.StartNew();
             var weights = await LLamaWeights.LoadFromFileAsync(parameters, cancellationToken, null);
             try
@@ -108,8 +119,8 @@ namespace SemanticKernel
                 var kernel = builder.Build();
 
                 _weights = weights;
-                _logger.LogInformation("LLM loaded in {Seconds:F1} s ({Parameters:N0} parameters)",
-                    stopwatch.Elapsed.TotalSeconds, weights.ParameterCount);
+                _logger.LogInformation("{Role} LLM loaded in {Seconds:F1} s ({Parameters:N0} parameters)",
+                    Role, stopwatch.Elapsed.TotalSeconds, weights.ParameterCount);
                 return kernel;
             }
             catch
@@ -120,7 +131,8 @@ namespace SemanticKernel
         }
 
         // llama.cpp prints the whole model metadata at info level; keep it at Debug, warnings/errors as is.
-        // The callback can only be set before the native library is loaded, hence the catch.
+        // The callback can only be set before the native library is loaded, hence the catch (the second
+        // factory always lands here: the first one has loaded the library already).
         private void ForwardNativeLogs()
         {
             try
@@ -138,7 +150,7 @@ namespace SemanticKernel
             }
             catch (InvalidOperationException)
             {
-                // Native library already loaded; its logs keep going to stderr.
+                // Native library already loaded; its logs keep going where the first factory sent them.
             }
         }
 

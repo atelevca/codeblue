@@ -33,6 +33,8 @@ as written. "Known ASR mishearings" pairs what the recognizer typically produces
 lists official diagnosis names (code | name | chapter) to recognize a misheard diagnosis; these names are
 written without diacritics, so never strip diacritics from the text to match them, and never insert the codes
 or the chapter names. Never copy words from these lists into the text unless they fix a misheard word.
-Output: ONLY a JSON array with exactly the same ids as "segments":
+Output: ONLY a JSON array with the segments you CHANGED, each with its id and the full corrected text:
 [{"id": int, "text": string}]
+Do not return unchanged segments. If nothing needs a correction, output exactly: []
+Never return an id that is not in "segments", and never return the same id twice.
 No markdown, no comments, no other text.

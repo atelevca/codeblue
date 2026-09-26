@@ -5,9 +5,9 @@ de adevăr; PDF-ul este randat din același Delta salvat. Formatarea nu trece pr
 
 | Metodă | Rută | Rezultat |
 | --- | --- | --- |
-| POST | `/document/save/{jobId}` fără corp | Extrage faptele, generează MOM, convertește în Delta, verifică textul final față de transcript și salvează. |
+| POST | `/document/save/{jobId}` fără corp | Extrage faptele, randează MOM din ele (în cod, fără al doilea apel la model), convertește în Delta, verifică textul final față de transcript și salvează. |
 | POST | `/document/save/{jobId}` cu `{ "delta": { "ops": [...] } }` | Verifică și salvează documentul editat. |
-| GET | `/document/get/{jobId}` | Returnează `jobId`, `delta`, `minutesMarkdown`, `verification`, `savedAt`. |
+| GET | `/document/get/{jobId}` | Returnează `jobId`, `delta`, `minutesMarkdown`, `verification`, `savedAt`. `verification.pending = true` cât timp verificarea din fundal nu s-a încheiat. |
 | GET | `/document/downloadpdf/{jobId}` | Descarcă ultima versiune salvată, `application/pdf`. |
 
 `minutesMarkdown` este o reprezentare textuală derivată pentru verificarea LLM;
@@ -23,7 +23,14 @@ apare înainte de orice asociere, deci vorbitorii sunt „Speaker N”; după
 `PUT /jobs/{id}/speakers`, un nou `POST /document/save/{jobId}` fără corp regenerează
 procesul-verbal cu numele și funcțiile lor. Documentele cu discrepanțe se salvează
 împreună cu raportul; antetul PDF indică necesitatea revizuirii. Erorile de verificare
-nu înlocuiesc versiunea salvată anterior. Salvarea este sincronă și poate dura cât inferența LLM.
+nu înlocuiesc versiunea salvată anterior. Salvarea prin API este sincronă și poate dura cât inferența LLM.
+
+Conveierul de transcriere procedează altfel: ultimul pas extrage faptele, randează documentul
+și îl salvează cu `verification.pending = true`, apoi jobul devine `Completed`; verificarea
+rulează în fundal (`MinutesVerificationWorker`) și scrie rezultatul în același fișier, cu excepția
+cazului în care documentul a fost resalvat între timp (atunci rezultatul învechit este aruncat).
+Clientul interoghează `GET /document/get/{jobId}` până când `pending` devine `false`. La
+repornire, documentele rămase cu `pending` sunt puse din nou în coadă.
 
 ## Integrarea editorului
 
@@ -94,8 +101,8 @@ Documentul și raportul sunt salvate atomic în
 404: job/document inexistent; 409: transcriere nefinalizată sau lipsă;
 400: Delta invalid; 422: transcript invalid sau limite LLM depășite.
 Limitele `Minutes` din SemanticKernel se aplică și generării/verificării prin API.
-Citirea și descărcarea nu încarcă modelul LLM. Fluxul audio nu generează automat MOM;
-clientul apelează `save` după finalizarea transcrierii.
+Citirea și descărcarea nu încarcă modelul LLM. Fluxul audio generează automat MOM la
+finalul transcrierii; `save` fără corp îl regenerează (de exemplu după asocierea vorbitorilor).
 
 PDF-ul folosește PDFsharp/MigraDoc și fonturi locale: Arial pe Windows sau DejaVu Sans
 pe Linux. `Documents:FontDirectory` poate indica directorul fonturilor; în lipsa lor

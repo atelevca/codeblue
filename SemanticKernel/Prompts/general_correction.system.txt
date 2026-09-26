@@ -31,6 +31,8 @@ After the JSON there may be a reference list. "Normal Moldovan mixed speech" lis
 errors (for example Russian words written in Latin letters inside Romanian speech, or Romanian words
 inside Russian speech): keep them exactly as written. Never copy words from that list into the text
 unless they fix a misheard word.
-Output: ONLY a JSON array with exactly the same ids as "segments":
+Output: ONLY a JSON array with the segments you CHANGED, each with its id and the full corrected text:
 [{"id": int, "text": string}]
+Do not return unchanged segments. If nothing needs a correction, output exactly: []
+Never return an id that is not in "segments", and never return the same id twice.
 No markdown, no comments, no other text.

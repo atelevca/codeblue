@@ -6,6 +6,8 @@ namespace HealthTech.Workflow.Steps
 {
     /// <summary>
     /// Последний шаг: по готовому транскрипту собирает протокол и сохраняет его рядом с ним.
+    /// Сверка протокола с транскриптом в шаг не входит: она ставится в очередь и идёт после
+    /// того, как задание уже Completed, чтобы пользователь получил документ на минуты раньше.
     /// </summary>
     public class GenerateMinutesStep : JobStep
     {
@@ -30,8 +32,8 @@ namespace HealthTech.Workflow.Steps
 
         protected override async Task ExecuteAsync(IStepExecutionContext context)
         {
-            // Третий долгий шаг: 7B на CPU считает протокол минутами. Без докладов о фазах
-            // полоса стоит на 92% и выглядит зависшей.
+            // Долгий шаг: 7B на CPU извлекает факты минутами. Без доклада о фазе полоса
+            // стоит на 92% и выглядит зависшей.
             var phase = new Progress<DocumentPhase>(p => _ = Progress.ReportAsync(JobId, Caption(p), Percent(p)));
 
             // Протокол - производная от транскрипта, а не сам транскрипт. Если модель не
@@ -40,12 +42,8 @@ namespace HealthTech.Workflow.Steps
             try
             {
                 var document = await _documents.GenerateAsync(JobId, phase);
-                Logger.LogInformation(
-                    "Задание {JobId}: протокол сохранён (сверка: {Verification})",
-                    JobId,
-                    document.Verification.Completed
-                        ? $"{document.Verification.Findings.Count} расхождений, {document.Verification.DiscardedFindings} отброшено"
-                        : "не выполнена");
+                Logger.LogInformation("Задание {JobId}: протокол сохранён (сверка: {Verification})",
+                    JobId, DocumentService.Describe(document.Verification));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -56,14 +54,12 @@ namespace HealthTech.Workflow.Steps
         private static string Caption(DocumentPhase phase) => phase switch
         {
             DocumentPhase.ExtractingFacts => "Генерация протокола: извлечение фактов",
-            DocumentPhase.Generating => "Генерация протокола: составление документа",
             _ => "Генерация протокола: сверка с транскриптом"
         };
 
         private static int Percent(DocumentPhase phase) => phase switch
         {
             DocumentPhase.ExtractingFacts => BandStart,
-            DocumentPhase.Generating => 94,
             _ => 98
         };
     }
