@@ -1,6 +1,34 @@
 @HealthTech_HostAddress = http://localhost:5089
 @JobId = 00000000-0000-0000-0000-000000000000
 
+### Generate, verify against the completed transcript, and save the Romanian MOM (no body)
+POST {{HealthTech_HostAddress}}/document/save/{{JobId}}
+Accept: application/json
+
+### Read saved MOM and verification report
+GET {{HealthTech_HostAddress}}/document/get/{{JobId}}
+Accept: application/json
+
+### Verify and save a full Quill getContents() snapshot (not the incremental text-change Delta)
+POST {{HealthTech_HostAddress}}/document/save/{{JobId}}
+Content-Type: application/json
+
+{
+  "delta": {
+    "ops": [
+      { "insert": "Proces-verbal" },
+      { "insert": "\n", "attributes": { "header": 1 } },
+      { "insert": "Rezumat" },
+      { "insert": "\n", "attributes": { "header": 2 } },
+      { "insert": "Discuție de lucru.\nResponsabil: Nespecificat\nTermen: Nespecificat\n" }
+    ]
+  }
+}
+
+### Download the saved MOM as PDF
+GET {{HealthTech_HostAddress}}/document/downloadpdf/{{JobId}}
+Accept: application/pdf
+
 ### Типы записей для выпадашки при загрузке
 GET {{HealthTech_HostAddress}}/profiles
 Accept: application/json
