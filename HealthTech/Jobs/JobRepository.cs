@@ -13,6 +13,13 @@ namespace HealthTech.Jobs
         Task SetWorkflowIdAsync(Guid id, string workflowId, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Оформляет запись по уже загруженному файлу и переводит её в Pending.
+        /// Возвращает false, если строки в статусе Uploaded не оказалось.
+        /// </summary>
+        Task<bool> TrySaveRecordAsync(Guid id, string title, int? speakersCount, string profileKey,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Помечает как Failed задания, оставшиеся в Running или Pending после перезапуска
         /// приложения. Возвращает число затронутых строк.
         /// </summary>
@@ -22,7 +29,8 @@ namespace HealthTech.Jobs
     public class JobRepository : IJobRepository
     {
         private const string Columns =
-            "Id, FileName, ProfileKey, Status, CurrentStep, Percent, WorkflowId, Error, CreatedAt, CompletedAt";
+            "Id, FileName, ProfileKey, Status, CurrentStep, Percent, WorkflowId, Error, CreatedAt, CompletedAt, " +
+            "SizeBytes, Format, DurationSec, Title, SpeakersCount";
 
         private readonly IDbConnectionFactory _connections;
 
@@ -36,7 +44,8 @@ namespace HealthTech.Jobs
             using var connection = _connections.Create();
             await connection.ExecuteAsync(
                 $"INSERT INTO Jobs ({Columns}) VALUES (@Id, @FileName, @ProfileKey, @Status, @CurrentStep, " +
-                "@Percent, @WorkflowId, @Error, @CreatedAt, @CompletedAt)",
+                "@Percent, @WorkflowId, @Error, @CreatedAt, @CompletedAt, " +
+                "@SizeBytes, @Format, @DurationSec, @Title, @SpeakersCount)",
                 new
                 {
                     Id = job.Id.ToString(),
@@ -48,7 +57,12 @@ namespace HealthTech.Jobs
                     job.WorkflowId,
                     job.Error,
                     CreatedAt = job.CreatedAt.ToString("O"),
-                    CompletedAt = job.CompletedAt?.ToString("O")
+                    CompletedAt = job.CompletedAt?.ToString("O"),
+                    job.SizeBytes,
+                    job.Format,
+                    job.DurationSec,
+                    job.Title,
+                    job.SpeakersCount
                 });
         }
 
@@ -63,7 +77,11 @@ namespace HealthTech.Jobs
         public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
         {
             using var connection = _connections.Create();
-            var rows = await connection.QueryAsync<Row>($"SELECT {Columns} FROM Jobs ORDER BY CreatedAt DESC");
+            // Загруженные, но не оформленные файлы - ещё не записи: пользователь в этот
+            // момент заполняет форму, и в списке им делать нечего.
+            var rows = await connection.QueryAsync<Row>(
+                $"SELECT {Columns} FROM Jobs WHERE Status <> @Uploaded ORDER BY CreatedAt DESC",
+                new { Uploaded = nameof(JobStatus.Uploaded) });
             return rows.Select(r => r.ToJob()).ToList();
         }
 
@@ -111,6 +129,29 @@ namespace HealthTech.Jobs
                 new { Id = id.ToString(), WorkflowId = workflowId });
         }
 
+        public async Task<bool> TrySaveRecordAsync(
+            Guid id, string title, int? speakersCount, string profileKey,
+            CancellationToken cancellationToken = default)
+        {
+            using var connection = _connections.Create();
+            // Условие Status = Uploaded делает переход атомарным. Проверки в сервисе для этого мало:
+            // два одновременных POST /jobs на один fileId прошли бы её оба и запустили два workflow
+            // на одном файле. Здесь второй получает ноль строк и превращается в 409.
+            var affected = await connection.ExecuteAsync(
+                "UPDATE Jobs SET Title = @Title, SpeakersCount = @SpeakersCount, ProfileKey = @ProfileKey, " +
+                "Status = @Pending WHERE Id = @Id AND Status = @Uploaded",
+                new
+                {
+                    Id = id.ToString(),
+                    Title = title,
+                    SpeakersCount = speakersCount,
+                    ProfileKey = profileKey,
+                    Pending = nameof(JobStatus.Pending),
+                    Uploaded = nameof(JobStatus.Uploaded)
+                });
+            return affected == 1;
+        }
+
         public async Task<int> FailRunningAsync(string reason, CancellationToken cancellationToken = default)
         {
             using var connection = _connections.Create();
@@ -140,12 +181,18 @@ namespace HealthTech.Jobs
             public string? Error { get; set; }
             public string CreatedAt { get; set; } = "";
             public string? CompletedAt { get; set; }
+            public long SizeBytes { get; set; }
+            public string? Format { get; set; }
+            public double? DurationSec { get; set; }
+            public string? Title { get; set; }
+            public long? SpeakersCount { get; set; }
 
             public Job ToJob() => new(
                 Guid.Parse(Id), FileName, ProfileKey,
                 Enum.Parse<JobStatus>(Status), CurrentStep, (int)Percent, WorkflowId, Error,
                 DateTimeOffset.Parse(CreatedAt),
-                CompletedAt is null ? null : DateTimeOffset.Parse(CompletedAt));
+                CompletedAt is null ? null : DateTimeOffset.Parse(CompletedAt),
+                SizeBytes, Format, DurationSec, Title, (int?)SpeakersCount);
         }
     }
 }
