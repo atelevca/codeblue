@@ -19,10 +19,15 @@ public sealed record MinutesVerification
 
 public sealed record MinutesDiscrepancy
 {
-    /// <summary>Unsupported, Omission or Contradiction.</summary>
+    public static readonly IReadOnlySet<string> Kinds =
+        new HashSet<string>(StringComparer.Ordinal) { "Unsupported", "Omission", "Contradiction", "Misattribution" };
+
+    /// <summary>Document section the finding belongs to ("Antet", "Participanți", "Acțiuni", ...); null when the model gave none.</summary>
+    public string? Section { get; init; }
+    /// <summary>Unsupported, Omission, Contradiction or Misattribution.</summary>
     public required string Kind { get; init; }
     public required string Description { get; init; }
-    /// <summary>Exact source quotation; null for an unsupported claim.</summary>
+    /// <summary>Exact source quotation (transcript or metadata); null for an unsupported claim.</summary>
     public required string? TranscriptQuote { get; init; }
     /// <summary>Exact document quotation; null for an omission.</summary>
     public required string? DocumentQuote { get; init; }

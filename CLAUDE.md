@@ -203,7 +203,13 @@ missing.
 
 **Minutes of meeting** (`HealthTech/Documents/`, `SemanticKernel/Minutes/`): the local LLM extracts facts
 from the speakers transcript, writes the minutes, and a verification pass checks them against the
-transcript. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
+transcript. The transcript is the named dialogue (bound doctors' names instead of `Speaker N`, same as
+`GET /jobs/{id}/transcript`), and the record title plus the bound persons go along as `metadata`. The
+facts (`MeetingFacts`, snake_case JSON) have the shape of the document: header, participants, agenda,
+decisions/actions/open issues with an `agenda_id`, next meeting, summary. The generated Markdown must
+carry the template headings in order; the agenda list and the three tables are rendered in code from
+the facts, never taken from the model. Finding kinds are `Unsupported`, `Omission`, `Contradiction`, `Misattribution`,
+each with an optional `section`. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
 PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
 Linux (`Documents:FontDirectory` overrides). The PDF carries the Medpark letterhead taken from
 `Ghid-de-pregatire-pentru-ecografie-final.pdf`: logo and tagline (`HealthTech/Documents/Branding/*.png`,

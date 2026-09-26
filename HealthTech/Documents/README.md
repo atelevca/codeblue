@@ -12,7 +12,16 @@ de adevăr; PDF-ul este randat din același Delta salvat. Formatarea nu trece pr
 
 `minutesMarkdown` este o reprezentare textuală derivată pentru verificarea LLM;
 editorul trebuie să citească și să trimită `delta`. Citatele raportului de verificare
-se referă la această reprezentare textuală. Documentele cu discrepanțe se salvează
+se referă la această reprezentare textuală. Fiecare discrepanță are `kind`
+(`Unsupported`, `Omission`, `Contradiction`, `Misattribution`) și, opțional, `section`
+(secțiunea documentului: „Antet”, „Participanți”, „Acțiuni” etc.).
+
+Sursa generării este dialogul cu numele medicilor asociați vorbitorilor (același text
+ca `GET /jobs/{id}/transcript`), plus metadatele înregistrării: titlul din fișa
+înregistrării și persoanele asociate, cu specialitatea. Documentul generat de conveier
+apare înainte de orice asociere, deci vorbitorii sunt „Speaker N”; după
+`PUT /jobs/{id}/speakers`, un nou `POST /document/save/{jobId}` fără corp regenerează
+procesul-verbal cu numele și funcțiile lor. Documentele cu discrepanțe se salvează
 împreună cu raportul; antetul PDF indică necesitatea revizuirii. Erorile de verificare
 nu înlocuiesc versiunea salvată anterior. Salvarea este sincronă și poate dura cât inferența LLM.
 
@@ -75,7 +84,8 @@ Nu se acceptă operațiile `retain`/`delete` din evenimentul `text-change`, embe
 (imagini/video/formule) sau formate în afara listei de mai sus; acestea produc 400,
 fără eliminarea tăcută a conținutului. Listele suportate sunt `ordered` și `bullet`.
 Tabelele MOM generate sunt convertite în paragrafe cu etichete pentru compatibilitate
-cu Quill standard; nu este necesar un plugin de tabele.
+cu Quill standard; nu este necesar un plugin de tabele. Din Markdown se preiau titlurile,
+listele, `**bold**` și `*italic*`.
 
 ## Stocare și erori
 

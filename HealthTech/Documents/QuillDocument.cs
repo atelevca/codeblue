@@ -197,14 +197,16 @@ internal static class QuillDocument
         text = WebUtility.HtmlDecode(Regex.Replace(text, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase));
         foreach (var line in text.Split('\n'))
         {
-            foreach (var part in Regex.Split(line, @"(\*\*[^*]+\*\*)"))
+            foreach (var part in Regex.Split(line, @"(\*\*[^*]+\*\*|\*[^*]+\*)"))
             {
                 if (part.Length == 0) continue;
                 var bold = part.Length > 4 && part.StartsWith("**") && part.EndsWith("**");
+                var italic = !bold && part.Length > 2 && part.StartsWith('*') && part.EndsWith('*');
                 ops.Add(new QuillOperation
                 {
-                    Insert = bold ? part[2..^2] : part,
-                    Attributes = bold ? new() { ["bold"] = JsonSerializer.SerializeToElement(true) } : null
+                    Insert = bold ? part[2..^2] : italic ? part[1..^1] : part,
+                    Attributes = bold ? new() { ["bold"] = JsonSerializer.SerializeToElement(true) }
+                        : italic ? new() { ["italic"] = JsonSerializer.SerializeToElement(true) } : null
                 });
             }
             ops.Add(new QuillOperation { Insert = "\n", Attributes = attributes });

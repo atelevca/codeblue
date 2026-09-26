@@ -26,6 +26,7 @@ const KIND_LABELS: Record<FindingKind, string> = {
   Unsupported: 'Afirmație fără suport în transcriere',
   Omission: 'Omisiune',
   Contradiction: 'Contradicție',
+  Misattribution: 'Atribuire greșită',
 };
 
 @Component({
