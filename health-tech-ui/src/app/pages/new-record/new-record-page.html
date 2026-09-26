@@ -1,0 +1,258 @@
+<input
+  #fileInput
+  type="file"
+  [accept]="accept"
+  (change)="onInputChange($event)"
+  style="display: none"
+/>
+
+<div class="wrap">
+  <h1 class="page-title">Înregistrare nouă</h1>
+  <p class="lead">
+    Încărcați fișierul audio, indicați câte persoane vorbesc și vă vom returna procesul-verbal al
+    întâlnirii.
+  </p>
+
+  <div class="steps">
+    @for (st of steps(); track st.label) {
+      <div class="step" [class]="st.state">
+        <div class="step__mark mono">{{ st.mark }}</div>
+        <span class="step__label">{{ st.label }}</span>
+      </div>
+      @if (st.line) {
+        <div class="steps__line"></div>
+      }
+    }
+  </div>
+
+  @if (store.phase() === 'empty' || store.phase() === 'error') {
+    <div
+      class="drop"
+      [class.dragging]="dragging()"
+      [class.error]="store.phase() === 'error'"
+      (click)="browse()"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
+    >
+      <div class="drop__icon">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 13V3M6 7l4-4 4 4M4 13v3h12v-3"></path>
+        </svg>
+      </div>
+      <div style="margin-top: 18px; font-size: 16px; font-weight: 500">
+        {{ dragging() ? 'Eliberați pentru a încărca' : 'Trageți fișierul audio aici' }}
+      </div>
+      <div style="margin-top: 4px; color: var(--text-2)">
+        sau
+        <span style="color: var(--accent-ink); font-weight: 500"
+          >alegeți un fișier de pe computer</span
+        >
+      </div>
+      <div class="drop__formats">
+        @for (fm of formats; track fm) {
+          <span class="mono">{{ fm }}</span>
+        }
+      </div>
+      <div style="margin-top: 10px; font-size: 12px; color: var(--text-3)">
+        Maximum 500 MB per fișier
+      </div>
+    </div>
+
+    @if (store.error(); as err) {
+      <div class="alert-error" style="margin-top: 12px">
+        <div class="alert-error__icon">!</div>
+        <div style="flex: 1">
+          <div class="alert-error__title">{{ err.title }}</div>
+          <div class="alert-error__msg">{{ err.message }}</div>
+        </div>
+        <button class="alert-error__close" (click)="store.clearError()">Închide</button>
+      </div>
+    }
+
+    <div style="display: flex; justify-content: center; margin-top: 20px">
+      <button
+        class="btn btn--ghost"
+        style="height: auto; padding: 6px 10px"
+        (click)="store.useSample()"
+      >
+        Nu aveți un fișier la îndemână? Folosiți o înregistrare demonstrativă →
+      </button>
+    </div>
+  } @else {
+    <div class="file">
+      <div class="file__icon">
+        <i style="height: 8px"></i><i style="height: 16px"></i><i style="height: 11px"></i
+        ><i style="height: 18px"></i><i style="height: 7px"></i>
+      </div>
+      <div style="flex: 1; min-width: 0">
+        <div class="ellipsis" style="font-weight: 500">{{ store.file()?.name }}</div>
+        <div class="mono" style="font-size: 13px; color: var(--text-3); margin-top: 2px">
+          {{ fileMeta() }}
+        </div>
+        @if (uploading()) {
+          <div class="bar" style="height: 4px; margin-top: 10px; background: var(--hover)">
+            <div [style.width.%]="store.progress()" style="transition: width 0.12s linear"></div>
+          </div>
+        }
+      </div>
+      @if (uploading()) {
+        <button class="btn" style="height: 32px; color: var(--text-2)" (click)="store.remove()">
+          Anulează
+        </button>
+      } @else {
+        <div style="display: flex; gap: 6px; align-items: center">
+          <span class="file__ok">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 7.5l2.5 2.5L11 4.5"></path></svg
+            >Încărcat
+          </span>
+          <button class="btn" style="height: 32px" (click)="browse($event)">Înlocuiește</button>
+          <button class="btn file__remove" title="Elimină fișierul" (click)="store.remove()">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            >
+              <path d="M3.5 3.5l7 7M10.5 3.5l-7 7"></path>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="config card" [class.locked]="!ready()">
+      <section>
+        <div class="q">Numele înregistrării</div>
+        <div class="q-hint">Așa va apărea în titlul procesului-verbal.</div>
+        <input
+          class="field-input"
+          style="margin-top: 14px"
+          maxlength="120"
+          [value]="store.recName()"
+          (input)="store.recName.set($any($event.target).value)"
+          [placeholder]="placeholder()"
+        />
+        <div class="pills">
+          @for (s of nameSuggestions(); track s) {
+            <button class="pill" (click)="store.recName.set(s)">{{ s }}</button>
+          }
+        </div>
+      </section>
+
+      <section>
+        <div class="q">Câți vorbitori sunt în înregistrare?</div>
+        <div class="q-hint">
+          Un număr exact ne ajută să separăm fiecare voce. Dacă nu sunteți sigur, alegeți cea mai
+          bună estimare.
+        </div>
+        <div class="speakers">
+          @for (n of speakerOptions; track n) {
+            <button
+              class="opt mono"
+              [class.on]="store.speakers() === n"
+              (click)="store.speakers.set(n)"
+            >
+              {{ n }}
+            </button>
+          }
+        </div>
+        <div class="legend">
+          @for (n of speakerOptions.slice(0, store.speakers()); track n) {
+            <span
+              ><span
+                class="dot"
+                style="width: 8px; height: 8px"
+                [style.background]="colors[n - 1]"
+              ></span
+              >Vorbitor {{ n }}</span
+            >
+          }
+        </div>
+      </section>
+
+      <section>
+        <div class="q">Tipul discuției</div>
+        <div class="q-hint">Stabilește structura procesului-verbal și terminologia folosită.</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px">
+          @for (t of types; track t.id) {
+            <button
+              class="opt type-opt"
+              [class.on]="store.type() === t.id"
+              (click)="store.type.set(t.id)"
+            >
+              {{ t.label }}
+            </button>
+          }
+        </div>
+        <div class="type-hint">{{ typeHint() }}</div>
+      </section>
+
+      <section>
+        <div class="q">Limba procesului-verbal</div>
+        <div class="q-hint">
+          Procesul-verbal este redactat în această limbă, indiferent de limba vorbită în
+          înregistrare.
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px">
+          @for (l of langs; track l.code) {
+            <button
+              class="opt lang-opt"
+              [class.on]="store.lang() === l.code"
+              (click)="store.lang.set(l.code)"
+            >
+              <span class="mono">{{ l.code }}</span
+              >{{ l.label }}
+            </button>
+          }
+        </div>
+      </section>
+
+      <div class="result">
+        <span style="color: var(--text-3)">Rezultat</span>
+        <span>{{ outputLabel() }}</span>
+      </div>
+    </div>
+
+    <button class="start" [class.enabled]="ready() && !store.starting()" (click)="start()">
+      {{ store.starting() ? 'Se pornește…' : 'Începe procesarea' }}
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 8h10M9 4l4 4-4 4"></path>
+      </svg>
+    </button>
+    <div style="text-align: center; margin-top: 10px; font-size: 12px; color: var(--text-3)">
+      {{ estLabel() }}
+    </div>
+  }
+</div>

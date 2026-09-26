@@ -1,0 +1,239 @@
+<div class="head">
+  <div class="head__ok">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M4.5 10.5l3.5 3.5 7.5-8"></path>
+    </svg>
+  </div>
+  <div style="flex: 1; min-width: 240px">
+    <h1>Procesul-verbal al întâlnirii este gata</h1>
+    <div style="color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere">
+      {{ record().title }} · {{ readyDate() }}
+    </div>
+  </div>
+  <a class="btn btn--lg" routerLink="/new">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+    >
+      <path d="M8 3v10M3 8h10"></path></svg
+    >Înregistrare nouă
+  </a>
+</div>
+
+<div class="layout">
+  <article class="doc">
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      "
+    >
+      <div class="doc__eyebrow mono">Proces-verbal · {{ typeLabel() }}</div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        @if (translatingTo(); as tl) {
+          <span class="translating"
+            ><span class="dot pulse"></span>Se traduce în {{ langName(tl) }}…</span
+          >
+        }
+        <div class="seg">
+          @for (l of langs; track l.code) {
+            <button [class.on]="lang() === l.code" [title]="l.name" (click)="pickLang(l.code)">
+              {{ l.label }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="doc__body" [class.dim]="translatingTo()">
+      <input
+        class="doc__title"
+        title="Redenumește"
+        maxlength="120"
+        [value]="record().title"
+        (change)="rename($event)"
+        (keydown.enter)="$any($event.target).blur()"
+      />
+      <div style="color: var(--text-3); font-size: 13px; margin-top: 6px">{{ meta() }}</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px">
+        @for (n of names(); track $index) {
+          <span class="chip"
+            ><span class="dot" [style.background]="colors[$index]"></span>{{ n }}</span
+          >
+        }
+      </div>
+
+      <div class="sep"></div>
+
+      @if (mom(); as m) {
+        <div class="eyebrow">{{ m.sectionTitles.summary }}</div>
+        <p class="summary">{{ m.summary }}</p>
+
+        <div class="eyebrow gap">{{ m.sectionTitles.decisions }}</div>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px">
+          @for (d of m.decisions; track $index) {
+            <div style="display: flex; gap: 12px; align-items: flex-start">
+              <span class="num mono">{{ $index + 1 }}</span>
+              <span style="font-size: 15px; line-height: 1.5; padding-top: 1px">{{ d }}</span>
+            </div>
+          }
+        </div>
+
+        @if (actions().length) {
+          <div class="eyebrow gap">{{ m.sectionTitles.actions }}</div>
+          <ul class="actions">
+            @for (a of actions(); track $index) {
+              <li>
+                {{ a.task }}<span style="color: var(--text-3)"> — {{ a.owner }}, {{ a.due }}</span>
+              </li>
+            }
+          </ul>
+        }
+
+        <div class="eyebrow gap">{{ m.sectionTitles.topics }}</div>
+        <div style="display: flex; flex-direction: column; margin-top: 6px">
+          @for (t of topics(); track $index) {
+            <div class="topic">
+              <span class="mono" style="font-size: 12px; color: var(--text-3); padding-top: 2px">{{
+                t.ts
+              }}</span>
+              <div>
+                <div style="font-weight: 500; font-size: 15px">{{ t.title }}</div>
+                <div
+                  style="
+                    color: var(--text-2);
+                    margin-top: 3px;
+                    line-height: 1.55;
+                    text-wrap: pretty;
+                  "
+                >
+                  {{ t.note }}
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      } @else if (momError(); as err) {
+        <div class="alert-error">
+          <div class="alert-error__icon">!</div>
+          <div class="alert-error__msg" style="margin: 0">{{ err }}</div>
+        </div>
+      } @else {
+        <div class="loading">
+          <span class="dot pulse" style="background: var(--accent-2)"></span>Se încarcă
+          procesul-verbal…
+        </div>
+      }
+    </div>
+  </article>
+
+  <div class="side">
+    <div class="card" style="padding: 20px">
+      <div style="font-weight: 500">Exportă procesul-verbal</div>
+      <div class="seg formats">
+        @for (f of formats; track f) {
+          <button class="mono" [class.on]="format() === f" (click)="pickFormat(f)">{{ f }}</button>
+        }
+      </div>
+      <div
+        class="mono"
+        style="font-size: 12px; color: var(--text-3); margin-top: 10px; overflow-wrap: anywhere"
+      >
+        {{ docName() }}
+      </div>
+      <button
+        class="download"
+        [class.done]="download() === 'done'"
+        [class.busy]="download() === 'preparing'"
+        [disabled]="!mom()"
+        (click)="exportFile()"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10"></path>
+        </svg>
+        {{
+          download() === 'preparing'
+            ? 'Se pregătește…'
+            : download() === 'done'
+              ? 'Descărcat · descarcă din nou'
+              : 'Descarcă ' + format()
+        }}
+      </button>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 8px;
+        "
+      >
+        <button class="btn side-btn" [disabled]="!mom()" (click)="emailOpen.set(true)">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="2" y="3.5" width="12" height="9" rx="1.5"></rect>
+            <path d="M2.5 4.5L8 8.5l5.5-4"></path></svg
+          >Trimite pe e-mail
+        </button>
+        <button class="btn side-btn" [disabled]="!mom()" (click)="copyText()">
+          {{ copied() ? 'Copiat ✓' : 'Copiază ca text' }}
+        </button>
+      </div>
+    </div>
+
+    <app-speaker-panel [record]="record()" [(expanded)]="mappingExpanded" />
+
+    <div class="card" style="padding: 6px 20px">
+      @for (d of details(); track d.k) {
+        <div class="detail">
+          <span style="color: var(--text-3); flex-shrink: 0">{{ d.k }}</span
+          ><span style="text-align: right; overflow-wrap: anywhere">{{ d.v }}</span>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+@if (emailOpen()) {
+  <app-email-dialog
+    [record]="record()"
+    [format]="format()"
+    [lang]="lang()"
+    [docName]="docName()"
+    (closed)="emailOpen.set(false)"
+    (openMapping)="openMappingFromEmail()"
+  />
+}

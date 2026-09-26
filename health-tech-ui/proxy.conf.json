@@ -1,0 +1,4 @@
+{
+  "/files": { "target": "http://localhost:5089", "secure": false, "changeOrigin": true },
+  "/records": { "target": "http://localhost:5089", "secure": false, "changeOrigin": true }
+}

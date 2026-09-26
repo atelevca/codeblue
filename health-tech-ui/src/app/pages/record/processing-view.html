@@ -1,0 +1,97 @@
+<div class="wrap">
+  <div class="title-row">
+    <h1>{{ record().title }}</h1>
+    @if (failed()) {
+      <span class="badge badge--failed"><span class="dot"></span>Eșuat</span>
+    } @else if (pending()) {
+      <span class="badge badge--pending"><span class="dot"></span>În coadă</span>
+    } @else {
+      <span class="badge badge--processing"><span class="dot pulse"></span>În procesare</span>
+    }
+  </div>
+  <div style="color: var(--text-3); margin-top: 6px; font-size: 13px">{{ meta() }}</div>
+
+  <div class="card panel">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px">
+      <div>
+        <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em">
+          {{ headline() }}
+        </div>
+        <div style="color: var(--text-2); margin-top: 3px">{{ subline() }}</div>
+      </div>
+      <div class="pct mono" [class.failed]="failed()" [class.pending]="pending()">
+        {{ progress() }}%
+      </div>
+    </div>
+    <div class="wave">
+      @for (b of wave(); track $index) {
+        <div [style.height.%]="b.h" [class.filled]="b.filled" [class.failed]="failed()"></div>
+      }
+    </div>
+    <div class="mono foot">
+      <span>{{ eta() }}</span
+      ><span>{{ record().id }}</span>
+    </div>
+
+    @if (failed()) {
+      <div class="failure">
+        <div class="alert-error__title">Nu am putut finaliza această înregistrare</div>
+        <div class="alert-error__msg" style="margin-top: 3px">{{ errorMessage() }}</div>
+        <div style="display: flex; gap: 8px; margin-top: 14px">
+          <button class="btn btn--dark" (click)="retry.emit()">Reia procesarea</button>
+          <a class="btn" routerLink="/new" style="border-color: oklch(0.88 0.05 25)"
+            >Încarcă alt fișier</a
+          >
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="card stages">
+    @for (sg of stages(); track sg.name) {
+      <div class="stage" [class]="sg.state">
+        <div class="stage__icon">
+          @switch (sg.state) {
+            @case ('done') {
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M2.5 6.2l2.3 2.3L9.5 3.8"></path>
+              </svg>
+            }
+            @case ('active') {
+              <div class="stage__pip pulse"></div>
+            }
+            @case ('failed') {
+              <span>!</span>
+            }
+          }
+        </div>
+        <div style="flex: 1; min-width: 0">
+          <div class="stage__name">{{ sg.name }}</div>
+          <div style="font-size: 13px; color: var(--text-3); margin-top: 1px">{{ sg.desc }}</div>
+        </div>
+        <div class="stage__right mono">{{ sg.right }}</div>
+      </div>
+    }
+  </div>
+
+  @if (!failed()) {
+    <div class="leave">
+      <div style="flex: 1; min-width: 240px">
+        <div style="font-weight: 500">Puteți părăsi această pagină</div>
+        <div style="color: var(--text-2); font-size: 13px; margin-top: 2px; text-wrap: pretty">
+          Procesarea continuă în fundal. Vă anunțăm aici când procesul-verbal este gata.
+        </div>
+      </div>
+      <a class="btn" routerLink="/new">Înregistrare nouă</a>
+    </div>
+  }
+</div>

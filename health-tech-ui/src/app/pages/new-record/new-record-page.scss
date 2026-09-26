@@ -1,0 +1,221 @@
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+}
+.lead {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 15px;
+  text-wrap: pretty;
+}
+.drop {
+  border: 1.5px dashed #d6d4ce;
+  background: var(--subtle);
+  border-radius: 16px;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.drop:hover {
+  border-color: var(--accent-border-hover);
+}
+.drop.error {
+  border-color: oklch(0.82 0.08 25);
+}
+.drop.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drop__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(20, 20, 15, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  transition: transform 0.2s;
+}
+.drop.dragging .drop__icon {
+  transform: translateY(-4px) scale(1.06);
+}
+.drop__formats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 22px;
+}
+.drop__formats span {
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+.file {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.file__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: oklch(0.96 0.011 196);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.file__icon i {
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.file__ok {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ok);
+  margin-right: 6px;
+}
+.file__remove {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-2);
+}
+.file__remove:hover {
+  background: var(--danger-soft);
+  color: oklch(0.5 0.17 25);
+  border-color: var(--danger-border);
+}
+.config {
+  margin-top: 16px;
+  border-radius: 14px;
+  transition: opacity 0.25s;
+}
+.config.locked {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.config section {
+  padding: 22px 22px 20px;
+}
+.config section + section {
+  border-top: 1px solid var(--line-soft);
+}
+.q {
+  font-weight: 500;
+  font-size: 15px;
+}
+.q-hint {
+  color: var(--text-2);
+  margin-top: 3px;
+  text-wrap: pretty;
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pill {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.pill:hover {
+  border-color: var(--accent-border-hover);
+  color: var(--text);
+}
+.speakers {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 18px;
+}
+.speakers .opt {
+  height: 44px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 14px;
+}
+.legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.type-opt {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+  text-align: left;
+}
+.type-hint {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--subtle);
+  border: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.lang-opt {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.lang-opt .mono {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.lang-opt.on .mono {
+  color: var(--accent-ink);
+}
+.result {
+  border-top: 1px solid var(--line-soft);
+  padding: 14px 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .speakers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

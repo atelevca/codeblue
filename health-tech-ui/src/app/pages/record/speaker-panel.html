@@ -1,0 +1,236 @@
+<div class="card" style="padding: 20px">
+  <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px">
+    <div style="font-weight: 500">Asocierea vorbitorilor</div>
+    <div
+      class="mono"
+      style="font-size: 12px"
+      [style.color]="mappedCount() === record().speakersCount ? 'var(--ok)' : 'var(--text-3)'"
+    >
+      {{
+        mappedCount() ? mappedCount() + ' din ' + record().speakersCount + ' asociați' : 'Opțional'
+      }}
+    </div>
+  </div>
+  <div style="font-size: 12px; color: var(--text-3); margin-top: 2px; text-wrap: pretty">
+    Pas opțional: asociați vocile detectate cu persoane din director. Fără asociere, rămân „Vorbitor
+    1”, „Vorbitor 2” etc.
+  </div>
+
+  @if (!expanded()) {
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px">
+      @for (sp of speakers(); track sp.i) {
+        <span class="chip" style="height: 24px; font-size: 12px; padding: 0 9px">
+          <span class="dot" [style.background]="sp.color"></span>{{ sp.person?.name ?? sp.label }}
+        </span>
+      }
+    </div>
+    <button class="btn wide" style="margin-top: 12px" (click)="toggleExpanded()">
+      {{ mappedCount() ? 'Editează asocierea' : 'Asociază vorbitorii' }}
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 4.5L6 7.5 9 4.5"></path>
+      </svg>
+    </button>
+  } @else {
+    @if (suggestionCount()) {
+      <button class="accept-all" (click)="acceptAll()">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M8 1.5l1.6 4.2 4.4.3-3.4 2.8 1.1 4.3L8 10.7 4.3 13.1l1.1-4.3L2 6l4.4-.3z"></path>
+        </svg>
+        Acceptă toate sugestiile · {{ suggestionCount() }}
+      </button>
+    }
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px">
+      @for (sp of speakers(); track sp.i) {
+        <div class="spk" [class.open]="pickFor() === sp.i">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span class="dot" style="width: 8px; height: 8px" [style.background]="sp.color"></span>
+            <span class="mono" style="font-size: 12px; font-weight: 500">{{ sp.label }}</span>
+            <span class="mono" style="margin-left: auto; font-size: 11px; color: var(--text-3)"
+              >{{ sp.time }} · {{ sp.pct }}</span
+            >
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 8px; margin-top: 9px">
+            <button
+              class="play"
+              [class.on]="playing() === sp.i"
+              title="Redă mostra vocală"
+              (click)="play(sp.i)"
+            >
+              @if (playing() === sp.i) {
+                <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor">
+                  <rect x="2" y="1.5" width="3" height="9" rx="1"></rect>
+                  <rect x="7" y="1.5" width="3" height="9" rx="1"></rect>
+                </svg>
+              } @else {
+                <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M3 1.5v9l7.5-4.5z"></path>
+                </svg>
+              }
+            </button>
+            <div
+              style="font-size: 12px; line-height: 1.45; color: var(--text-2); text-wrap: pretty"
+            >
+              <span class="mono" style="color: var(--text-3); margin-right: 6px">{{ sp.ts }}</span
+              >“{{ sp.quote }}”
+            </div>
+          </div>
+          <button class="picker" (click)="togglePicker(sp.i)">
+            <span class="avatar" [class.empty]="!sp.person" [style.background]="sp.avBg">{{
+              sp.av
+            }}</span>
+            <span
+              style="
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                line-height: 1.25;
+              "
+            >
+              <span
+                class="ellipsis"
+                style="font-size: 13px; font-weight: 500"
+                [style.color]="sp.person ? 'var(--text)' : 'var(--text-2)'"
+              >
+                {{ sp.person?.name ?? 'Asociază o persoană' }}
+              </span>
+              <span class="ellipsis" style="font-size: 11px; color: var(--text-3)">{{
+                sp.person?.role ?? 'Neasociat încă'
+              }}</span>
+            </span>
+            <svg
+              class="chev"
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="#8E8C87"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 4.5L6 7.5 9 4.5"></path>
+            </svg>
+          </button>
+          @if (sp.suggestion && pickFor() !== sp.i) {
+            <div class="sug">
+              <span class="ellipsis" style="flex: 1; min-width: 0">
+                Sugestie: <b>{{ sp.suggestion.name }}</b> · {{ sp.suggestion.confidence }}% match
+              </span>
+              <button (click)="link(sp.i, { personId: sp.suggestion.personId })">Acceptă</button>
+            </div>
+          }
+          @if (pickFor() === sp.i) {
+            <div class="menu">
+              <div class="menu__search">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                >
+                  <circle cx="6" cy="6" r="4"></circle>
+                  <path d="M9 9l3 3"></path>
+                </svg>
+                <input
+                  autofocus
+                  placeholder="Caută persoane"
+                  [value]="pickQ()"
+                  (input)="pickQ.set($any($event.target).value)"
+                />
+              </div>
+              <div class="menu__list">
+                @for (op of options(); track op.person.id) {
+                  <button
+                    class="menu__item"
+                    [class.mine]="op.mine"
+                    (click)="link(sp.i, { personId: op.person.id })"
+                  >
+                    <span
+                      class="avatar"
+                      style="width: 26px; height: 26px; font-size: 10px"
+                      [style.background]="op.mine ? sp.color : '#F3F2EF'"
+                      >{{ op.av }}</span
+                    >
+                    <span
+                      style="
+                        flex: 1;
+                        min-width: 0;
+                        display: flex;
+                        flex-direction: column;
+                        line-height: 1.25;
+                      "
+                    >
+                      <span class="ellipsis" style="font-size: 13px">{{ op.person.name }}</span>
+                      <span class="ellipsis" style="font-size: 11px; color: var(--text-3)">{{
+                        op.person.role
+                      }}</span>
+                    </span>
+                    <span
+                      style="font-size: 11px; white-space: nowrap"
+                      [style.color]="op.tagAccent ? 'oklch(0.45 0.09 196)' : 'var(--text-3)'"
+                      >{{ op.tag }}</span
+                    >
+                  </button>
+                } @empty {
+                  <div style="padding: 12px 8px; font-size: 12px; color: var(--text-3)">
+                    Nicio persoană din director nu corespunde cu „{{ pickQ() }}”.
+                  </div>
+                }
+              </div>
+              @if (pickQ().trim().length > 1) {
+                <button class="menu__guest" (click)="addGuest(sp.i)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  >
+                    <path d="M8 3v10M3 8h10"></path>
+                  </svg>
+                  Adaugă „{{ pickQ() }}” ca participant extern
+                </button>
+              }
+              @if (sp.person) {
+                <button class="menu__clear" (click)="link(sp.i, null)">
+                  Anulează asocierea · păstrează ca {{ sp.label }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+    <button
+      class="btn btn--ghost wide"
+      style="margin-top: 12px; height: 32px; font-size: 12px"
+      (click)="toggleExpanded()"
+    >
+      Restrânge
+    </button>
+  }
+</div>

@@ -1,0 +1,177 @@
+<div class="backdrop" (click)="close()">
+  <div class="dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <div class="dialog__head">
+      <div style="font-weight: 600; font-size: 16px; letter-spacing: -0.01em">
+        Trimite procesul-verbal pe e-mail
+      </div>
+      <button class="icon-btn" (click)="close()" aria-label="Închide">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        >
+          <path d="M3.5 3.5l7 7M10.5 3.5l-7 7"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="dialog__body">
+      <div>
+        @if (people().length) {
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+              margin-bottom: 8px;
+            "
+          >
+            <div class="label" style="margin: 0">Participanți din înregistrare</div>
+            <button class="link" (click)="toggleAll()">
+              {{ allOn() ? 'Deselectează toți' : 'Selectează toți' }}
+            </button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px">
+            @for (p of people(); track p.email) {
+              <button
+                class="person"
+                [class.on]="to().includes(p.email)"
+                (click)="togglePerson(p.email)"
+              >
+                <span class="box">
+                  <svg
+                    width="9"
+                    height="9"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M2.5 6.2l2.3 2.3L9.5 3.8"></path>
+                  </svg>
+                </span>
+                <span
+                  class="avatar"
+                  style="width: 26px; height: 26px; font-size: 10px"
+                  [style.background]="p.color"
+                  >{{ p.av }}</span
+                >
+                <span
+                  style="
+                    flex: 1;
+                    min-width: 0;
+                    display: flex;
+                    flex-direction: column;
+                    line-height: 1.25;
+                  "
+                >
+                  <span class="ellipsis" style="font-size: 13px">{{ p.name }}</span>
+                  <span class="ellipsis" style="font-size: 11px; color: var(--text-3)">{{
+                    p.email
+                  }}</span>
+                </span>
+                <span class="mono" style="font-size: 11px; color: var(--text-3)">{{ p.spk }}</span>
+              </button>
+            }
+          </div>
+        } @else {
+          <div class="hint-box">
+            <span style="flex: 1; text-wrap: pretty"
+              >Asociați vorbitorii cu persoane din director pentru a le trimite procesul-verbal
+              dintr-un clic.</span
+            >
+            <button
+              class="btn"
+              style="height: 26px; padding: 0 10px; font-size: 12px"
+              (click)="openMapping.emit()"
+            >
+              Asociază
+            </button>
+          </div>
+        }
+
+        <div class="label">{{ people().length ? 'Alte adrese de e-mail' : 'Către' }}</div>
+        <div class="to" [class.error]="toError()" (click)="focusTo()">
+          @for (x of others(); track x) {
+            <span class="to__chip">
+              {{ x }}
+              <button (click)="remove(x, $event)" aria-label="Elimină">
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                >
+                  <path d="M3.5 3.5l7 7M10.5 3.5l-7 7"></path>
+                </svg>
+              </button>
+            </span>
+          }
+          <input
+            #toInput
+            [value]="toText()"
+            (input)="onToInput($any($event.target).value)"
+            (keydown)="onToKey($event)"
+            (blur)="commit()"
+            [placeholder]="others().length ? '' : 'nume@companie.ro'"
+          />
+        </div>
+        @if (toError(); as err) {
+          <div style="font-size: 12px; color: oklch(0.5 0.17 25); margin-top: 6px">{{ err }}</div>
+        } @else {
+          <div style="font-size: 12px; color: var(--text-3); margin-top: 6px">
+            Apăsați Enter sau virgulă după fiecare adresă.
+          </div>
+        }
+      </div>
+
+      <div>
+        <div class="label">Subiect</div>
+        <input class="text" [value]="subject()" (input)="subject.set($any($event.target).value)" />
+      </div>
+      <div>
+        <div class="label">
+          Mesaj <span style="color: var(--text-3); font-weight: 400">(opțional)</span>
+        </div>
+        <textarea
+          class="text"
+          rows="3"
+          [value]="message()"
+          (input)="message.set($any($event.target).value)"
+        ></textarea>
+      </div>
+
+      <div class="attach">
+        <div class="attach__fmt mono">{{ format() }}</div>
+        <div style="flex: 1; min-width: 0">
+          <div class="ellipsis" style="font-size: 13px; font-weight: 500">{{ docName() }}</div>
+          <div style="font-size: 12px; color: var(--text-3)">Atașat · {{ langLabel() }}</div>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            [checked]="inline()"
+            (change)="inline.set($any($event.target).checked)"
+          />
+          Include în corpul e-mailului
+        </label>
+      </div>
+    </div>
+
+    <div class="dialog__foot">
+      <button class="btn btn--lg" style="font-weight: 400" (click)="close()">Anulează</button>
+      <button class="btn btn--lg btn--primary" [class.btn--disabled]="!canSend()" (click)="send()">
+        {{ sending() ? 'Se trimite…' : 'Trimite procesul-verbal' }}
+      </button>
+    </div>
+  </div>
+</div>
