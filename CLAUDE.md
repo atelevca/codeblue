@@ -181,6 +181,14 @@ missing.
 - `Glossary/phonetic_confusions.txt` (`heard | correct | comment`) is the third glossary of `medical` only.
   It is loaded and selected exactly like the others; `ProfileCatalog.HeadingFor` gives it its own heading
   ("Known ASR mishearings ..."). It is filled by hand from `.medical_corrections.md` reports.
+- `Glossary/diagnostics.csv` + `subclasses.csv` + `classes.csv` are an ICD-10 export (Romanian, **no
+  diacritics**, `;`-separated, header row; 12,350 diagnoses). Only `diagnostics.csv` is listed in the profile;
+  `ProfileCatalog` sends any `.csv` to `Icd10Glossary.Load`, which reads the two other files from the same
+  folder and joins them into ordinary glossary lines `code | name | subclass`. From there it is a
+  normal `Glossary` (same prefix matching, same `MaxGlossaryCharacters` cap); the subclass column is context
+  only, like the English column. The class name is deliberately not appended: it doubles the line length
+  and halves how many diagnoses fit in the 2,000-character budget, so `classes.csv` only validates the join. The heading and the system prompt tell the model the names lack diacritics
+  and that it must not strip them from the transcript or insert codes. The fourth glossary of `medical` only.
 - `CorrectionValidator` rejects changed numbers, translation (Cyrillic ratio change > 0.15, letters moving between Cyrillic and Latin ≥ 2 each way, or a changed Latin/Cyrillic word-run order), >30% length change and >25% edit distance.
 
 **Speakers and persons** (`HealthTech/Speakers/`):
@@ -197,7 +205,9 @@ missing.
 from the speakers transcript, writes the minutes, and a verification pass checks them against the
 transcript. The document is stored as a Quill Delta in `transcripts/<jobId>/minutes.document.json`; the
 PDF is rendered from that Delta with PDFsharp/MigraDoc, using Arial on Windows and macOS and DejaVu Sans on
-Linux (`Documents:FontDirectory` overrides). Details and the editor contract are in `HealthTech/Documents/README.md`.
+Linux (`Documents:FontDirectory` overrides). The PDF carries the Medpark letterhead taken from
+`Ghid-de-pregatire-pentru-ecografie-final.pdf`: logo and tagline (`HealthTech/Documents/Branding/*.png`,
+embedded resources) in the page header, teal `#007C84` rules and headings, grey `#625C5B` footer/status. Details and the editor contract are in `HealthTech/Documents/README.md`.
 
 **Controllers** (`HealthTech/Controllers/`, attribute-routed `[Route("[controller]")]`) — thin, delegate to services:
 - `FilesController` — `POST /files` (multipart: `file`) → `{ fileId, fileName, sizeBytes, format, durationSec }`.

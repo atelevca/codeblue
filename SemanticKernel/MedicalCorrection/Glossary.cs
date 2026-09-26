@@ -30,9 +30,14 @@ namespace SemanticKernel.MedicalCorrection
 
         public string Heading { get; }
 
-        public static Glossary Load(string path, string heading)
+        public int Count => _entries.Count;
+
+        public static Glossary Load(string path, string heading) => FromLines(File.ReadLines(path), heading);
+
+        /// <summary>Builds a glossary from lines already in the <c>term | term | meaning</c> shape (e.g. converted from CSV).</summary>
+        public static Glossary FromLines(IEnumerable<string> lines, string heading)
         {
-            var entries = File.ReadLines(path)
+            var entries = lines
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0 && !l.StartsWith('#') && l.Contains('|'))
                 .Select(l => (l, Keys(SearchableColumns(l), withPairs: false)))

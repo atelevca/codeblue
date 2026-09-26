@@ -25,12 +25,14 @@ A segment may carry a "lowConfidence" list: words the recognizer itself was unsu
 offset in the text and the probability. Start with those - they are the most likely errors. This is a
 hint, not a restriction: a clear mishearing outside the list may be fixed too, and a word in the list
 that is obviously correct must be left alone.
-After the JSON there may be up to three reference lists. "Reference medical terms" helps to recognize misheard
+After the JSON there may be up to four reference lists. "Reference medical terms" helps to recognize misheard
 medical words. "Normal Moldovan mixed speech" lists words that are NOT errors (for example Russian words
 written in Latin letters inside Romanian speech, or Romanian words inside Russian speech): keep them exactly
 as written. "Known ASR mishearings" pairs what the recognizer typically produces (left) with the correct form
-(right): if the left form appears in the text, replace it with the right one. Never copy words from these
-lists into the text unless they fix a misheard word.
+(right): if the left form appears in the text, replace it with the right one. "Reference ICD-10 diagnoses"
+lists official diagnosis names (code | name | chapter) to recognize a misheard diagnosis; these names are
+written without diacritics, so never strip diacritics from the text to match them, and never insert the codes
+or the chapter names. Never copy words from these lists into the text unless they fix a misheard word.
 Output: ONLY a JSON array with exactly the same ids as "segments":
 [{"id": int, "text": string}]
 No markdown, no comments, no other text.
