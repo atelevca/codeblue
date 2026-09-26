@@ -24,7 +24,19 @@ builder.Services.AddSerilog(logger => logger
         retainedFileCountLimit: builder.Configuration.GetValue("LogFiles:RetainedFileCountLimit", 14),
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
 
-builder.Services.AddControllers();
+// Записи консилиумов бывают на час и больше: Medpark_audio.m4a весит 59 МБ,
+// а умолчание Kestrel - 30 МБ. Без этого POST /jobs отвечает 413.
+var maxUploadBytes = builder.Configuration.GetValue("Uploads:MaxBytes", 1_073_741_824L);
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(
+    options => options.Limits.MaxRequestBodySize = maxUploadBytes);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(
+    options => options.MultipartBodyLengthLimit = maxUploadBytes);
+
+// Статус задания уходит в UI строкой ("Running"), а не числом: число нечитаемо
+// и ломается при любой вставке в середину перечисления.
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 
 builder.Services.Configure<AudioOptions>(builder.Configuration.GetSection(AudioOptions.SectionName));
@@ -96,6 +108,7 @@ builder.Services.AddWorkflow(options => options.UseSqlite(
 builder.Services.Configure<ProfileOptions>(builder.Configuration.GetSection(ProfileOptions.SectionName));
 builder.Services.AddSingleton<IProfileCatalog, ProfileCatalog>();
 
+builder.Services.AddSingleton<IJobService, JobService>();
 builder.Services.AddSingleton<IJobProgress, JobProgress>();
 builder.Services.AddTransient<StubStep>();
 
