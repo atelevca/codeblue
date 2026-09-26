@@ -151,12 +151,14 @@
       </div>
 
       <div class="attach">
-        <div class="attach__fmt mono">TXT</div>
+        <div class="attach__fmt mono">PDF</div>
         <div style="flex: 1; min-width: 0">
           <div class="ellipsis" style="font-size: 13px; font-weight: 500">
-            Se deschide clientul de e-mail
+            proces-verbal-{{ record().id }}.pdf
           </div>
-          <div style="font-size: 12px; color: var(--text-3)">PDF-ul se atașează manual</div>
+          <div style="font-size: 12px; color: var(--text-3)">
+            Atașat automat · server local de e-mail
+          </div>
         </div>
         <label>
           <input
@@ -171,8 +173,12 @@
 
     <div class="dialog__foot">
       <button class="btn btn--lg" style="font-weight: 400" (click)="close()">Anulează</button>
-      <button class="btn btn--lg btn--primary" [class.btn--disabled]="!canSend()" (click)="send()">
-        Deschide în e-mail
+      <button
+        class="btn btn--lg btn--primary"
+        [class.btn--disabled]="!canSend() || sending()"
+        (click)="send()"
+      >
+        {{ sending() ? 'Se trimite…' : 'Trimite' }}
       </button>
     </div>
   </div>

@@ -33,6 +33,6 @@ npx prettier --write "src/**/*.{ts,html,scss}"
 
 - Backend: `dotnet run --project HealthTech --launch-profile http` from the parent folder.
 - Errors are RFC 7807; show RO text by `title`, never `detail` verbatim (may contain server paths) — except `Document error`, whose `detail` is RO.
-- Not in the backend, so frontend-only: the people directory and speaker ↔ person binding (not persisted), speaker suggestions, voice samples, e-mail (opens `mailto:`), "Copiază ca text", upload cancel. The MoM language switch (RO/RU/EN in `mom-view`) is UI-only and triggers nothing. No rename, retry of a failed job, or export formats other than PDF.
+- Not in the backend, so frontend-only: the people directory and speaker ↔ person binding (not persisted), speaker suggestions, voice samples, "Copiază ca text", upload cancel. The MoM language switch (RO/RU/EN in `mom-view`) is UI-only and triggers nothing. No rename, retry of a failed job, or export formats other than PDF.
 - `speakersCount` is informational only; the speaker list shown after processing comes from the transcript.
 - User-facing text is Romanian.
