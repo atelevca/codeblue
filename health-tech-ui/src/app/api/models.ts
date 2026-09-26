@@ -97,9 +97,11 @@ export interface QuillDelta {
   ops: QuillOp[];
 }
 
-export type FindingKind = 'Unsupported' | 'Omission' | 'Contradiction';
+export type FindingKind = 'Unsupported' | 'Omission' | 'Contradiction' | 'Misattribution';
 
 export interface VerificationFinding {
+  /** Document section ("Antet", "Participanți", "Acțiuni", ...); null when the model gave none. */
+  section?: string | null;
   kind: FindingKind;
   description: string;
   /** null for `Unsupported`. */

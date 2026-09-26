@@ -112,11 +112,7 @@ public sealed class DocumentPdfRenderer(IConfiguration configuration) : IDocumen
                 ? "Verificare automată: nefinalizată - documentul necesită revizuire manuală."
                 : saved.Verification.IsConsistent
                     ? "Verificare automată: fără discrepanțe raportate."
-                    : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe" +
-                      (saved.Verification.DiscardedFindings > 0
-                          ? $", {saved.Verification.DiscardedFindings} fără citat verificabil"
-                          : "") +
-                      " - necesită revizuire.");
+                    : $"Verificare automată: {saved.Verification.Findings.Count} discrepanțe - necesită revizuire.");
             status.Format.Font.Size = 8;
             status.Format.Font.Color = BrandGray;
             AddDelta(section, saved.Delta);

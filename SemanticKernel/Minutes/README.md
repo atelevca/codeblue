@@ -14,31 +14,48 @@ MinutesVerification verification = result.Verification;
 bool consistent = verification.IsConsistent;
 ```
 
-1. **Fact Extraction and Summary**: transcriptul este transformat în JSON cu
-   `summary`, `decisions`, `actions` și `issues`. Fiecare acțiune are
-   `description`, `responsible` și `deadline`.
+1. **Fact Extraction and Summary**: transcriptul (și, dacă există, metadatele:
+   titlul înregistrării și persoanele asociate vorbitorilor, `MeetingMetadata`) este
+   transformat în JSON cu structura unui proces-verbal: `meeting` (title, date, time,
+   location), `participants` (chair, secretary, present cu name/role, absent),
+   `agenda_explicit`, `agenda` (id, topic, discussion), `decisions`, `actions`
+   (description, responsible, deadline), `open_issues`, `next_meeting`, `summary`.
+   Deciziile, acțiunile și problemele poartă `agenda_id`, punctul din ordinea de zi la
+   care se referă (sau `null`). Numele câmpurilor sunt snake_case, ca în prompturi
+   (`JsonNamingPolicy.SnakeCaseLower`). Normalizarea (`NormalizeFacts`) respinge listele
+   lipsă sau intrările goale, pune `Nespecificat` în orice câmp text gol, renumerotează
+   agenda 1..n și anulează referințele `agenda_id` care nu indică un punct existent.
 2. **Minutes Generation**: un apel separat, cu istoric nou, primește exclusiv
-   faptele validate și rezumatul. Rezultatul este un proces-verbal Markdown cu
-   secțiunile Rezumat, Decizii, Acțiuni și Probleme.
-3. **Minutes Verification**: un nou apel al modelului compară documentul final
-   (inclusiv tabelul acțiunilor) direct cu transcriptul original. Raportul în română
-   conține concluzia și discrepanțele: afirmații fără suport, omisiuni și contradicții,
-   cu citate exacte și corectări sugerate. Citatele sunt verificate în cod față de
-   sursele primite. `IsConsistent` este adevărat numai când lista discrepanțelor este goală.
-   Discrepanțele sunt returnate pentru revizuire; documentul nu este rescris automat.
-   Verificarea separată este disponibilă prin `VerifyMinutesAsync(transcript, markdown)`.
+   faptele validate. Rezultatul este un proces-verbal Markdown cu secțiunile
+   Participanți, Ordinea de zi, Desfășurarea ședinței, Decizii, Acțiuni, Probleme deschise,
+   Următoarea ședință, Rezumat și Semnături; titlurile sunt validate în această ordine
+   (Semnături este opțional). Lista din Ordinea de zi (cu nota despre agenda dedusă) și
+   tabelele Decizii, Acțiuni și Probleme deschise, cu coloana „Punct” (agenda_id sau „–”),
+   sunt construite în cod din faptele normalizate, nu de model: etapa a doua nu poate omite un element, îl poate muta la alt punct sau înlocui
+   un responsabil/termen `Nespecificat` cu o presupunere.
+3. **Minutes Verification**: un nou apel al modelului compară documentul final direct
+   cu transcriptul original și metadatele. Raportul în română conține concluzia și
+   discrepanțele: afirmații fără suport, omisiuni, contradicții și atribuiri greșite
+   (`Unsupported`, `Omission`, `Contradiction`, `Misattribution`), fiecare cu secțiunea
+   documentului (`section`, opțional), citate exacte și corectări sugerate. Citatele sunt
+   verificate în cod: `transcriptQuote` trebuie să apară în transcript sau într-o valoare
+   din metadate, `documentQuote` în document. `IsConsistent` este adevărat numai când lista
+   discrepanțelor este goală. Discrepanțele sunt returnate pentru revizuire; documentul nu
+   este rescris automat. Verificarea separată este disponibilă prin
+   `VerifyMinutesAsync(transcript, markdown, metadata)`.
 
 Toate etapele produc text în română, cu excepția citatelor păstrate în limba sursei. Responsabilul și termenul necunoscute sunt
 `Nespecificat`; nu se propun valori. Etapele pot fi apelate separat prin
 `ExtractFactsAsync` și `GenerateMinutesAsync`, de exemplu pentru revizuirea
 faptelor înainte de redactare. Apelantul decide unde salvează rezultatele.
-Tabelul final al acțiunilor este construit direct din faptele normalizate, astfel
-încât etapa a doua să nu poată modifica responsabilii și termenele din acest tabel.
+Tabelele finale (decizii, acțiuni, probleme deschise) sunt construite direct din faptele
+normalizate, astfel încât etapa a doua să nu poată modifica conținutul sau atribuirile lor.
 
 Configurarea este în secțiunea `Minutes` din `appsettings.llm.json`; configurația
 aplicației și variabilele de mediu o pot suprascrie, de exemplu
 `Minutes__ExtractionMaxTokens`. Limitele inițiale sunt 6000 de caractere pentru
-transcript și 6000 pentru JSON-ul faptelor. Textele mai lungi sunt respinse explicit,
+transcript și 8000 pentru JSON-ul faptelor (structura cu agendă și discuții este mai
+lungă decât vechea listă); extragerea și generarea au 3072 de tokenuri de răspuns. Textele mai lungi sunt respinse explicit,
 nu trunchiate; împărțirea automată a transcriptelor nu este implementată.
 La creșterea limitelor, ajustați și `Llm:ContextSize` pentru a permite atât promptul,
 cât și răspunsul. Numărul de caractere nu garantează încadrarea în numărul de tokenuri.

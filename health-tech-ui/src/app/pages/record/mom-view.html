@@ -95,7 +95,7 @@
             }
             @for (f of v.findings; track $index) {
               <div class="finding">
-                <div class="finding__kind mono">{{ f.kindLabel }}</div>
+                <div class="finding__kind mono">{{ f.kindLabel }}@if (f.section) { · {{ f.section }}}</div>
                 <div>{{ f.description }}</div>
                 @if (f.documentQuote) {
                   <div class="finding__quote"><b>Document:</b> „{{ f.documentQuote }}”</div>

@@ -12,11 +12,11 @@ public sealed class MinutesOptions
     public int MaxTranscriptCharacters { get; set; } = 6000;
 
     /// <summary>Maximum serialized facts length passed to minutes generation.</summary>
-    public int MaxFactsCharacters { get; set; } = 6000;
+    public int MaxFactsCharacters { get; set; } = 8000;
 
-    public int ExtractionMaxTokens { get; set; } = 2048;
+    public int ExtractionMaxTokens { get; set; } = 3072;
 
-    public int GenerationMaxTokens { get; set; } = 2048;
+    public int GenerationMaxTokens { get; set; } = 3072;
 
     /// <summary>Maximum serialized combined transcript and final document length. Nothing is truncated.</summary>
     public int MaxVerificationCharacters { get; set; } = 14000;
