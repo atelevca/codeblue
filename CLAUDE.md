@@ -142,8 +142,9 @@ missing.
   `lowConfidence` list as `{ at, word, p }`, `at` being the character offset in the segment text. A word
   not found in the (trimmed, normalized) segment text is silently skipped. The offset is recomputed on
   both merges — segments into a turn (`SpeakerAlignmentService`) and a turn into correction pieces
-  (`MedicalTermCorrector`) — and a turn whose text the correction changed gets an empty list, since the
-  offsets would point into text that no longer exists.
+  (`MedicalTermCorrector`). When the correction changes a turn, `Reassemble` moves the words of unchanged
+  pieces to the pieces' new positions and drops only the words of rewritten pieces, so one fix in a long
+  turn does not wipe its flags. The `.speakers.json` and `.corrected.json` carry that recomputed list.
 - `IProcessedAudioDiarizationService` runs diarization only (no Whisper) on the given file and saves `<transcripts>/<name>.diarization.json` (segments with seconds + `mm:ss`).
 - `ISpeakerAlignmentService.Align` assigns each Whisper segment to the speaker whose turns overlap it most
   (nearest turn if none overlap) and merges consecutive same-speaker segments into turns. Alignment is per

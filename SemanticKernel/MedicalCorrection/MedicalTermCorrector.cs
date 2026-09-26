@@ -136,8 +136,24 @@ namespace SemanticKernel.MedicalCorrection
                 {
                     return segment;
                 }
-                var text = string.Concat(own.Select(p => p.Leading + finalTexts[p.Id] + p.Trailing));
-                return segment with { Text = text };
+
+                // Неуверенные слова нетронутых кусков переезжают на новое начало куска: одна правка
+                // в длинной реплике не должна стирать пометки всей реплики. У изменённого куска
+                // смещения указывают в исчезнувший текст - его слова отбрасываются.
+                var text = new StringBuilder();
+                var words = new List<LowConfidenceWord>();
+                foreach (var piece in own)
+                {
+                    text.Append(piece.Leading);
+                    var final = finalTexts[piece.Id];
+                    if (final == piece.Text)
+                    {
+                        var start = text.Length;
+                        words.AddRange(piece.LowConfidence.Select(w => w with { At = w.At + start }));
+                    }
+                    text.Append(final).Append(piece.Trailing);
+                }
+                return segment with { Text = text.ToString(), LowConfidence = words };
             }).ToList();
         }
 
