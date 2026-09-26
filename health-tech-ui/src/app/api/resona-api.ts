@@ -1,44 +1,44 @@
 import { HttpClient, HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, filter, map, timer, switchMap, of } from 'rxjs';
+import { Observable, filter, map } from 'rxjs';
 import {
   ApiError,
-  ExportFormat,
   ID,
-  Lang,
-  Mom,
-  MomGenerating,
-  ProcessingStatus,
-  RecordDetails,
-  RecordSummary,
+  Job,
+  ProblemDetails,
+  Profile,
+  QuillDelta,
   SaveRecordRequest,
-  SendEmailRequest,
-  SendEmailResponse,
-  SpeakerAssociation,
-  UploadFileResponse,
+  SavedDocument,
+  TranscriptCorrectionResult,
+  TranscriptResult,
+  UploadedFile,
 } from './models';
 
 export type UploadEvent =
-  { kind: 'progress'; loaded: number; total: number } | { kind: 'done'; file: UploadFileResponse };
+  { kind: 'progress'; loaded: number; total: number } | { kind: 'done'; file: UploadedFile };
 
 export interface ExportedFile {
   blob: Blob;
   fileName: string | null;
 }
 
-/** getMom result: the minutes, or `null` while a translation is still being generated (202). */
-export type MomResult = Mom | null;
-
+/** One method per backend endpoint (../docs/ui-integration.md). */
 @Injectable({ providedIn: 'root' })
 export class ResonaApi {
   private readonly http = inject(HttpClient);
 
-  /** 1. POST /files — emits upload progress, then the stored file. Unsubscribe to cancel. */
+  /** GET /profiles — the discussion types for the upload form. */
+  getProfiles(): Observable<Profile[]> {
+    return this.http.get<Profile[]>('/profiles');
+  }
+
+  /** POST /files — emits upload progress, then the probed file. Unsubscribe to cancel. */
   uploadFile(file: File): Observable<UploadEvent> {
     const body = new FormData();
     body.append('file', file, file.name);
     return this.http
-      .post<UploadFileResponse>('/files', body, { reportProgress: true, observe: 'events' })
+      .post<UploadedFile>('/files', body, { reportProgress: true, observe: 'events' })
       .pipe(
         map((e): UploadEvent | null => {
           if (e.type === HttpEventType.UploadProgress)
@@ -50,57 +50,45 @@ export class ResonaApi {
       );
   }
 
-  /** 2. POST /records */
-  saveRecord(req: SaveRecordRequest): Observable<RecordSummary> {
-    return this.http.post<RecordSummary>('/records', req);
+  /** POST /jobs — saves the record card and starts processing. */
+  saveRecord(req: SaveRecordRequest): Observable<Job> {
+    return this.http.post<Job>('/jobs', req);
   }
 
-  /** 3. POST /records/:id/process */
-  processRecord(id: ID): Observable<ProcessingStatus> {
-    return this.http.post<ProcessingStatus>(`/records/${id}/process`, null);
+  /** GET /jobs — all records, newest first (without `Uploaded`). */
+  listJobs(): Observable<Job[]> {
+    return this.http.get<Job[]>('/jobs');
   }
 
-  /** 4. GET /records/:id */
-  getRecord(id: ID): Observable<RecordDetails> {
-    return this.http.get<RecordDetails>(`/records/${id}`);
+  /** GET /jobs/{id} — card and progress; poll it while the record is processed. */
+  getJob(id: ID): Observable<Job> {
+    return this.http.get<Job>(`/jobs/${id}`);
   }
 
-  /** 5. GET /records/:id/status */
-  getProcessingStatus(id: ID): Observable<ProcessingStatus> {
-    return this.http.get<ProcessingStatus>(`/records/${id}/status`);
+  /** GET /jobs/{id}/result — the transcript with speakers (404 until `Completed`). */
+  getResult(id: ID): Observable<TranscriptResult> {
+    return this.http.get<TranscriptResult>(`/jobs/${id}/result`);
   }
 
-  /** 6. GET /records/:id/mom — `null` on 202 (generating). */
-  getMom(id: ID, lang?: Lang): Observable<MomResult> {
-    const params: Record<string, string> = lang ? { lang } : {};
+  /** POST /document/save/{id} without a body — generates the minutes. Takes 6–10 minutes. */
+  generateDocument(id: ID): Observable<SavedDocument> {
+    return this.http.post<SavedDocument>(`/document/save/${id}`, null);
+  }
+
+  /** POST /document/save/{id} with a full Quill snapshot — verifies and saves an edit. Slow too. */
+  saveDocument(id: ID, delta: QuillDelta): Observable<SavedDocument> {
+    return this.http.post<SavedDocument>(`/document/save/${id}`, { delta });
+  }
+
+  /** GET /document/get/{id} — the saved minutes (404 if never generated). */
+  getDocument(id: ID): Observable<SavedDocument> {
+    return this.http.get<SavedDocument>(`/document/get/${id}`);
+  }
+
+  /** GET /document/downloadpdf/{id} — the saved minutes as PDF. */
+  downloadPdf(id: ID): Observable<ExportedFile> {
     return this.http
-      .get<Mom | MomGenerating>(`/records/${id}/mom`, { params, observe: 'response' })
-      .pipe(map((r) => (r.status === 202 ? null : (r.body as Mom))));
-  }
-
-  /** getMom, retried every `retryMs` while the backend answers 202. */
-  getMomWhenReady(id: ID, lang?: Lang, retryMs = 2000): Observable<Mom> {
-    return this.getMom(id, lang).pipe(
-      switchMap((mom) =>
-        mom
-          ? of(mom)
-          : timer(retryMs).pipe(switchMap(() => this.getMomWhenReady(id, lang, retryMs))),
-      ),
-    );
-  }
-
-  /** 7. PUT /records/:id/speakers */
-  speakerAssociation(id: ID, speakers: SpeakerAssociation[]): Observable<SpeakerAssociation[]> {
-    return this.http
-      .put<{ speakers: SpeakerAssociation[] }>(`/records/${id}/speakers`, { speakers })
-      .pipe(map((r) => r.speakers));
-  }
-
-  /** 8. GET /records/:id/export */
-  exportMom(id: ID, format: ExportFormat, lang?: Lang): Observable<ExportedFile> {
-    const params: Record<string, string> = lang ? { format, lang } : { format };
-    return this.http
-      .get(`/records/${id}/export`, { params, responseType: 'blob', observe: 'response' })
+      .get(`/document/downloadpdf/${id}`, { responseType: 'blob', observe: 'response' })
       .pipe(
         map((r: HttpResponse<Blob>) => ({
           blob: r.body!,
@@ -109,40 +97,57 @@ export class ResonaApi {
       );
   }
 
-  /** 9. POST /records/:id/email */
-  sendEmail(id: ID, req: SendEmailRequest): Observable<SendEmailResponse> {
-    return this.http.post<SendEmailResponse>(`/records/${id}/email`, req);
-  }
-
-  /** 11. POST /records/:id/retry */
-  retryProcessing(id: ID): Observable<ProcessingStatus> {
-    return this.http.post<ProcessingStatus>(`/records/${id}/retry`, null);
-  }
-
-  /** 12. PATCH /records/:id */
-  updateRecord(id: ID, title: string): Observable<RecordSummary> {
-    return this.http.patch<RecordSummary>(`/records/${id}`, { title });
+  /** POST /audio/correctTranscript — re-runs term correction on a finished artifact (service). */
+  correctTranscript(
+    jobId: ID,
+    fileName: string,
+    profile: string,
+  ): Observable<TranscriptCorrectionResult> {
+    return this.http.post<TranscriptCorrectionResult>('/audio/correctTranscript', null, {
+      params: { jobId, fileName, profile },
+    });
   }
 }
 
+/** RO texts per ProblemDetails `title`; the backend `detail` may contain server paths. */
+const ERROR_MESSAGES: Record<string, string> = {
+  NotAudio: 'Fișierul nu conține audio sau este gol.',
+  CorruptedAudio: 'Fișierul audio este deteriorat și nu poate fi citit.',
+  UnknownProfile: 'Tipul discuției nu este recunoscut de server.',
+  InvalidRequest:
+    'Datele trimise nu sunt valide. Numărul de vorbitori trebuie să fie între 1 și 20.',
+  RecordAlreadyCreated: 'Înregistrarea pentru acest fișier a fost deja creată.',
+  InputNotFound: 'Fișierul nu a mai fost găsit pe server. Încărcați-l din nou.',
+  FfmpegUnavailable: 'Procesarea audio nu este disponibilă pe server (FFmpeg lipsește).',
+  LlmModelNotFound: 'Modelul lingvistic nu este instalat pe server.',
+  ConversionFailed: 'Conversia fișierului audio a eșuat.',
+  FileSystemError: 'Serverul nu a putut salva fișierul.',
+  ModelFailed: 'Modelul de recunoaștere a eșuat.',
+  InvalidTranscript: 'Transcrierea nu poate fi citită.',
+};
+
+const STATUS_MESSAGES: Record<number, string> = {
+  0: 'Serverul nu răspunde. Verificați conexiunea și încercați din nou.',
+  404: 'Resursa nu a fost găsită.',
+  409: 'Operația nu este posibilă în starea actuală a înregistrării.',
+  413: 'Fișierul depășește limita de 1 GB.',
+};
+
+const FALLBACK = 'A apărut o eroare neașteptată. Încercați din nou.';
+
 /** Normalizes any HTTP failure into an ApiError with a user-facing RO message. */
 export function toApiError(err: unknown): ApiError {
-  if (err instanceof HttpErrorResponse) {
-    const body = err.error as Partial<ApiError> | null;
-    if (body && typeof body === 'object' && body.message) {
-      return { code: body.code ?? String(err.status), message: body.message, field: body.field };
-    }
-    if (err.status === 0)
-      return {
-        code: 'NETWORK',
-        message: 'Serverul nu răspunde. Verificați conexiunea și încercați din nou.',
-      };
-    return {
-      code: String(err.status),
-      message: 'A apărut o eroare neașteptată. Încercați din nou.',
-    };
-  }
-  return { code: 'UNKNOWN', message: 'A apărut o eroare neașteptată. Încercați din nou.' };
+  if (!(err instanceof HttpErrorResponse)) return { code: 'UNKNOWN', message: FALLBACK };
+  const body = (err.error && typeof err.error === 'object' ? err.error : {}) as ProblemDetails;
+  if (body.traceId) console.warn(`API ${err.status} ${body.title ?? ''} traceId=${body.traceId}`);
+  const code = body.title ?? (err.status === 0 ? 'NETWORK' : String(err.status));
+  // DocumentService writes its details in Romanian and without paths.
+  const message =
+    (code === 'Document error' ? body.detail : undefined) ??
+    ERROR_MESSAGES[code] ??
+    STATUS_MESSAGES[err.status] ??
+    FALLBACK;
+  return { code, message, status: err.status, traceId: body.traceId };
 }
 
 function fileNameFromDisposition(header: string | null): string | null {

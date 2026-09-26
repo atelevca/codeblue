@@ -1,9 +1,8 @@
 /**
- * The backend does not implement `/files` and `/records` yet (see CLAUDE.md), so requests are
- * answered by `mockApiInterceptor` in memory. Set to `false` to hit the real backend through
- * `proxy.conf.json`.
+ * `true` answers the backend endpoints with `mockApiInterceptor` in memory (no backend needed).
+ * `false` hits the real backend through `proxy.conf.mjs`.
  */
-export const USE_MOCK_API = true;
+export const USE_MOCK_API = false;
 
-/** How often processing status is polled (schema.md: every 5 s). */
-export const STATUS_POLL_MS = 5000;
+/** How often a processing record is polled (ui-integration.md: every 2–3 s is plenty). */
+export const STATUS_POLL_MS = 3000;

@@ -1,8 +1,13 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, Subscription, switchMap, map, tap } from 'rxjs';
-import { DiscussionType, Lang, UploadFileResponse } from '../api/models';
+import { Observable, Subscription, map, tap } from 'rxjs';
+import { Profile, UploadedFile } from '../api/models';
 import { ResonaApi, toApiError } from '../api/resona-api';
-import { AUDIO_EXTENSIONS, MAX_FILE_BYTES } from '../shared/catalog';
+import {
+  AUDIO_EXTENSIONS,
+  FALLBACK_PROFILE_KEYS,
+  MAX_FILE_BYTES,
+  typeInfo,
+} from '../shared/catalog';
 import { fmtSize, stripExt } from '../shared/format';
 import { ProcessingTracker } from './processing-tracker';
 
@@ -15,10 +20,12 @@ export interface PickedFile {
   durationSec?: number;
 }
 
+/** Titles by ProblemDetails `title` of `POST /files`. */
 const UPLOAD_ERROR_TITLES: Record<string, string> = {
-  UNSUPPORTED_FORMAT: 'Format de fișier neacceptat',
-  FILE_TOO_LARGE: 'Fișierul este prea mare',
-  EMPTY_FILE: 'Fișierul este gol',
+  NotAudio: 'Fișierul nu este audio',
+  CorruptedAudio: 'Fișier audio deteriorat',
+  FfmpegUnavailable: 'Serviciu indisponibil',
+  413: 'Fișierul este prea mare',
 };
 
 const SAMPLE_NAME = 'Masă rotundă fondatori — ep. 12.wav';
@@ -34,18 +41,30 @@ export class NewRecordStore {
   readonly file = signal<PickedFile | null>(null);
   readonly loaded = signal(0);
   readonly error = signal<{ title: string; message: string } | null>(null);
-  readonly uploaded = signal<UploadFileResponse | null>(null);
+  readonly uploaded = signal<UploadedFile | null>(null);
 
+  /** `GET /profiles`; the discussion types offered in the form. */
+  readonly profiles = signal<Profile[]>([]);
   readonly recName = signal('');
   readonly speakers = signal(2);
-  readonly type = signal<DiscussionType>('executive');
-  readonly lang = signal<Lang>('RO');
+  readonly type = signal('medical');
   readonly starting = signal(false);
 
   readonly progress = computed(() => {
     const f = this.file();
     return f && f.size ? Math.min(100, (this.loaded() / f.size) * 100) : 0;
   });
+
+  loadProfiles(): void {
+    if (this.profiles().length) return;
+    this.api.getProfiles().subscribe({
+      next: (list) => this.useProfiles(list),
+      error: () =>
+        this.useProfiles(
+          FALLBACK_PROFILE_KEYS.map((key) => ({ key, displayName: typeInfo(key).label })),
+        ),
+    });
+  }
 
   handleFile(f: File | undefined): void {
     if (!f) return;
@@ -58,7 +77,7 @@ export class NewRecordStore {
     if (f.size > MAX_FILE_BYTES)
       return this.fail(
         'Fișierul este prea mare',
-        `Acest fișier are ${fmtSize(f.size)}. Limita este de 500 MB — încercați să-l exportați ca MP3 sau să eliminați pauzele.`,
+        `Acest fișier are ${fmtSize(f.size)}. Limita este de 1 GB — încercați să-l exportați ca MP3 sau să eliminați pauzele.`,
       );
     if (f.size === 0)
       return this.fail(
@@ -87,7 +106,7 @@ export class NewRecordStore {
     this.phase.set('empty');
   }
 
-  /** saveRecord + processRecord; emits the new record id. */
+  /** `POST /jobs` saves the card and starts processing; emits the record id (= fileId). */
   start(): Observable<string> {
     const up = this.uploaded()!;
     const title = this.recName().trim() || stripExt(up.fileName);
@@ -98,15 +117,10 @@ export class NewRecordStore {
         title,
         speakersCount: this.speakers(),
         discussionType: this.type(),
-        momLang: this.lang(),
       })
       .pipe(
-        switchMap((rec) =>
-          this.api.processRecord(rec.id).pipe(
-            tap((status) => this.tracker.track(rec.id, rec.title, status)),
-            map(() => rec.id),
-          ),
-        ),
+        tap((job) => this.tracker.track(job)),
+        map((job) => job.id),
         tap({
           next: () => this.reset(),
           error: () => this.starting.set(false),
@@ -119,6 +133,12 @@ export class NewRecordStore {
     this.recName.set('');
     this.speakers.set(2);
     this.starting.set(false);
+  }
+
+  private useProfiles(list: Profile[]): void {
+    this.profiles.set(list);
+    if (list.length && !list.some((p) => p.key === this.type()))
+      this.type.set(list.find((p) => p.key === 'medical')?.key ?? list[0].key);
   }
 
   private fail(title: string, message: string): void {
@@ -143,15 +163,19 @@ export class NewRecordStore {
           return;
         }
         this.uploaded.set(e.file);
-        this.file.update(
-          (pf) => pf && { ...pf, durationSec: e.file.durationSec, ext: e.file.format },
-        );
+        // `format` is ffprobe's synonym list (`mov,mp4,m4a,...`), so the extension stays.
+        this.file.update((pf) => pf && { ...pf, durationSec: e.file.durationSec });
         this.loaded.set(f.size);
         this.phase.set('ready');
       },
       error: (err) => {
         const api = toApiError(err);
-        this.fail(UPLOAD_ERROR_TITLES[api.code] ?? 'Încărcarea a eșuat', api.message);
+        this.fail(
+          UPLOAD_ERROR_TITLES[api.code] ??
+            UPLOAD_ERROR_TITLES[api.status ?? ''] ??
+            'Încărcarea a eșuat',
+          api.message,
+        );
       },
     });
   }

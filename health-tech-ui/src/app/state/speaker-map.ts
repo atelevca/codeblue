@@ -1,8 +1,6 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { ID, SpeakerAssociation } from '../api/models';
-import { ResonaApi, toApiError } from '../api/resona-api';
-import { PEOPLE, Person, emailOf } from '../shared/catalog';
-import { Toasts } from './toasts';
+import { Injectable, signal } from '@angular/core';
+import { ID } from '../api/models';
+import { PEOPLE, Person } from '../shared/catalog';
 
 /** A speaker mapped to a directory person or to an external guest. */
 export type SpeakerLink = { personId: string } | { guest: string };
@@ -22,13 +20,12 @@ export function resolveLink(link: SpeakerLink | null | undefined): ResolvedPerso
 }
 
 /**
- * Speaker ↔ person associations per record. The directory is frontend-only, so the state lives
- * here and every change is sent with speakerAssociation (PUT replaces all).
+ * Speaker ↔ person associations per record, index = position in `TranscriptResult.speakers`.
+ * Kept on the client only: the backend has no speaker-binding endpoint yet
+ * (`PUT /jobs/{id}/speakers` is planned, see ui-integration.md §11).
  */
 @Injectable({ providedIn: 'root' })
 export class SpeakerMap {
-  private readonly api = inject(ResonaApi);
-  private readonly toasts = inject(Toasts);
   private readonly links = signal<Record<ID, (SpeakerLink | null)[]>>({});
 
   of(recordId: ID): (SpeakerLink | null)[] {
@@ -53,23 +50,6 @@ export class SpeakerMap {
   }
 
   private save(recordId: ID, arr: (SpeakerLink | null)[]): void {
-    const previous = this.of(recordId);
     this.links.update((m) => ({ ...m, [recordId]: arr }));
-    const speakers: SpeakerAssociation[] = [];
-    arr.forEach((link, speakerIndex) => {
-      const r = resolveLink(link);
-      if (!r) return;
-      speakers.push(
-        r.person
-          ? { speakerIndex, name: r.name, email: emailOf(r.person), role: r.role, isGuest: false }
-          : { speakerIndex, name: r.name, isGuest: true },
-      );
-    });
-    this.api.speakerAssociation(recordId, speakers).subscribe({
-      error: (e) => {
-        this.links.update((m) => ({ ...m, [recordId]: previous }));
-        this.toasts.error('Asocierea nu a fost salvată', toApiError(e).message);
-      },
-    });
   }
 }

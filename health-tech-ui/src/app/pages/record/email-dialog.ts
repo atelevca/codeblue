@@ -9,30 +9,35 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ExportFormat, Lang, RecordDetails } from '../../api/models';
-import { ResonaApi, toApiError } from '../../api/resona-api';
-import { SPEAKER_COLORS, emailOf, langName } from '../../shared/catalog';
+import { Job } from '../../api/models';
+import { emailOf, speakerColor } from '../../shared/catalog';
 import { initials } from '../../shared/format';
+import { jobTitle } from '../../state/processing-tracker';
 import { SpeakerMap, resolveLink } from '../../state/speaker-map';
 import { Toasts } from '../../state/toasts';
 
 const isEmail = (x: string) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(x);
 
+/** mail clients choke on very long `mailto:` URLs, so the inline minutes are cut. */
+const MAX_INLINE_CHARS = 1500;
+
+/**
+ * The backend has no e-mail endpoint, so the dialog opens the user's mail client (`mailto:`)
+ * with recipients, subject and the minutes as text. The PDF has to be attached by hand.
+ */
 @Component({
   selector: 'app-email-dialog',
   templateUrl: './email-dialog.html',
   styleUrl: './email-dialog.scss',
 })
 export class EmailDialog implements OnInit {
-  private readonly api = inject(ResonaApi);
   private readonly toasts = inject(Toasts);
   private readonly speakerMap = inject(SpeakerMap);
   private readonly toInputEl = viewChild<ElementRef<HTMLInputElement>>('toInput');
 
-  readonly record = input.required<RecordDetails>();
-  readonly format = input.required<ExportFormat>();
-  readonly lang = input.required<Lang>();
-  readonly docName = input.required<string>();
+  readonly record = input.required<Job>();
+  /** The minutes as plain text, put into the body when "include" is on. */
+  readonly docText = input.required<string>();
   readonly closed = output<void>();
   /** "Asociază": close and open the speaker association panel. */
   readonly openMapping = output<void>();
@@ -47,7 +52,7 @@ export class EmailDialog implements OnInit {
               name: p.name,
               email: emailOf(p.person),
               av: initials(p.name),
-              color: SPEAKER_COLORS[i],
+              color: speakerColor(i),
               spk: 'V' + (i + 1),
             },
           ]
@@ -61,9 +66,8 @@ export class EmailDialog implements OnInit {
   protected readonly subject = signal('');
   protected readonly message = signal('');
   protected readonly inline = signal(true);
-  protected readonly sending = signal(false);
 
-  protected readonly langLabel = computed(() => langName(this.lang()));
+  private readonly title = computed(() => jobTitle(this.record()));
   protected readonly others = computed(() => {
     const mapped = new Set(this.people().map((p) => p.email));
     return this.to().filter((x) => !mapped.has(x));
@@ -72,16 +76,16 @@ export class EmailDialog implements OnInit {
     () => this.people().length > 0 && this.people().every((p) => this.to().includes(p.email)),
   );
   protected readonly canSend = computed(
-    () => !this.sending() && (this.to().length > 0 || isEmail(this.toText().trim())),
+    () => this.to().length > 0 || isEmail(this.toText().trim()),
   );
 
   ngOnInit(): void {
     this.to.set(this.people().map((p) => p.email));
-    this.subject.set('Proces-verbal: ' + this.record().title);
+    this.subject.set('Proces-verbal: ' + this.title());
   }
 
   protected close(): void {
-    if (!this.sending()) this.closed.emit();
+    this.closed.emit();
   }
 
   protected togglePerson(email: string): void {
@@ -147,33 +151,19 @@ export class EmailDialog implements OnInit {
       this.toError.update((e) => e ?? 'Adăugați cel puțin un destinatar.');
       return;
     }
-    if (this.sending()) return;
-    this.sending.set(true);
+    const text = this.docText();
+    const inline =
+      text.length > MAX_INLINE_CHARS ? text.slice(0, MAX_INLINE_CHARS) + '\n[…]' : text;
+    const body = [this.message().trim(), this.inline() ? inline : ''].filter(Boolean).join('\n\n');
+    const subject = this.subject().trim() || 'Proces-verbal: ' + this.title();
     const to = this.to();
-    this.api
-      .sendEmail(this.record().id, {
-        to,
-        subject: this.subject().trim() || 'Proces-verbal: ' + this.record().title,
-        message: this.message() || undefined,
-        attachmentFormat: this.format(),
-        lang: this.lang(),
-        includeInline: this.inline(),
-      })
-      .subscribe({
-        next: (r) => {
-          this.sending.set(false);
-          const sent = r.sentTo.length;
-          this.toasts.success(
-            'Proces-verbal trimis',
-            sent === 1 ? 'Trimis către ' + r.sentTo[0] : `Trimis către ${sent} destinatari`,
-          );
-          r.failed?.forEach((f) => this.toasts.error('E-mail netrimis', `${f.email}: ${f.reason}`));
-          this.closed.emit();
-        },
-        error: (e) => {
-          this.sending.set(false);
-          this.toError.set(toApiError(e).message);
-        },
-      });
+    const query = [`subject=${encodeURIComponent(subject)}`];
+    if (body) query.push(`body=${encodeURIComponent(body)}`);
+    window.location.href = `mailto:${to.join(',')}?${query.join('&')}`;
+    this.toasts.success(
+      'Deschis în clientul de e-mail',
+      to.length === 1 ? 'Către ' + to[0] : `Către ${to.length} destinatari`,
+    );
+    this.closed.emit();
   }
 }
