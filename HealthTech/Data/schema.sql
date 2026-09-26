@@ -1,15 +1,22 @@
 -- Схема прикладных таблиц. Идемпотентна: прогоняется при каждом старте.
 CREATE TABLE IF NOT EXISTS Jobs (
-    Id           TEXT    PRIMARY KEY,
-    FileName     TEXT    NOT NULL,
-    ProfileKey   TEXT    NOT NULL,
-    Status       TEXT    NOT NULL,
-    CurrentStep  TEXT    NULL,
-    Percent      INTEGER NOT NULL DEFAULT 0,
-    WorkflowId   TEXT    NULL,
-    Error        TEXT    NULL,
-    CreatedAt    TEXT    NOT NULL,
-    CompletedAt  TEXT    NULL
+    Id            TEXT    PRIMARY KEY,
+    FileName      TEXT    NOT NULL,
+    ProfileKey    TEXT    NOT NULL,
+    Status        TEXT    NOT NULL,
+    CurrentStep   TEXT    NULL,
+    Percent       INTEGER NOT NULL DEFAULT 0,
+    WorkflowId    TEXT    NULL,
+    Error         TEXT    NULL,
+    CreatedAt     TEXT    NOT NULL,
+    CompletedAt   TEXT    NULL,
+    -- Заполняется на загрузке файла (POST /files).
+    SizeBytes     INTEGER NOT NULL DEFAULT 0,
+    Format        TEXT    NULL,
+    DurationSec   REAL    NULL,
+    -- Заполняется при оформлении записи (POST /jobs).
+    Title         TEXT    NULL,
+    SpeakersCount INTEGER NULL
 );
 
 CREATE TABLE IF NOT EXISTS Persons (

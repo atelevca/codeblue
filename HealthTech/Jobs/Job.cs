@@ -2,6 +2,8 @@ namespace HealthTech.Jobs
 {
     public enum JobStatus
     {
+        /// <summary>Файл загружен и разобран, но запись ещё не оформлена и обработка не запущена.</summary>
+        Uploaded,
         Pending,
         Running,
         Completed,
@@ -19,5 +21,10 @@ namespace HealthTech.Jobs
         string? WorkflowId,
         string? Error,
         DateTimeOffset CreatedAt,
-        DateTimeOffset? CompletedAt);
+        DateTimeOffset? CompletedAt,
+        long SizeBytes,
+        string? Format,
+        double? DurationSec,
+        string? Title,
+        int? SpeakersCount);
 }

@@ -78,7 +78,8 @@ namespace HealthTech.Jobs
 
             await _jobs.InsertAsync(new Job(
                 jobId, safeName, profile.Key, JobStatus.Pending, null, 0, null, null,
-                DateTimeOffset.UtcNow, null), cancellationToken);
+                DateTimeOffset.UtcNow, null,
+                0, null, null, null, null), cancellationToken);
 
             string workflowId;
             try
