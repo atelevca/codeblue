@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { ID, SavedDocument } from '../api/models';
+import { ID, QuillDelta, SavedDocument } from '../api/models';
 import { CodeBlueApi, toApiError } from '../api/codeblue-api';
 import { ProcessingTracker } from './processing-tracker';
 import { Toasts } from './toasts';
@@ -10,6 +10,8 @@ export type MinutesState =
   | { kind: 'missing' }
   | { kind: 'generating'; startedAt: number }
   | { kind: 'ready'; doc: SavedDocument }
+  /** An edit is being verified and saved; `doc` is the last saved version meanwhile. */
+  | { kind: 'saving'; doc: SavedDocument; startedAt: number }
   | { kind: 'error'; message: string; canGenerate: boolean };
 
 /**
@@ -47,7 +49,8 @@ export class MinutesStore {
   }
 
   generate(id: ID, title: string): void {
-    if (this.of(id).kind === 'generating') return;
+    const kind = this.of(id).kind;
+    if (kind === 'generating' || kind === 'saving') return;
     const previous = this.of(id);
     this.set(id, { kind: 'generating', startedAt: Date.now() });
     this.api.generateDocument(id).subscribe({
@@ -71,6 +74,37 @@ export class MinutesStore {
         this.toasts.error('Generarea procesului-verbal a eșuat', message);
       },
     });
+  }
+
+  /**
+   * Verifies and saves an edited document (a full `getContents()` snapshot). The request runs the
+   * verification model, so it takes minutes; the previous version stays visible until it returns.
+   * Resolves to the saved document, or null when the save failed (the error is toasted).
+   */
+  saveEdit(id: ID, delta: QuillDelta, title: string): Promise<SavedDocument | null> {
+    const previous = this.of(id);
+    if (previous.kind !== 'ready') return Promise.resolve(null);
+    this.set(id, { kind: 'saving', doc: previous.doc, startedAt: Date.now() });
+    return new Promise((resolve) =>
+      this.api.saveDocument(id, delta).subscribe({
+        next: (doc) => {
+          this.set(id, { kind: 'ready', doc });
+          const elsewhere = this.tracker.viewing() !== id;
+          this.toasts.show({
+            kind: 'success',
+            title: 'Proces-verbal salvat',
+            body: elsewhere ? title : 'PDF-ul și e-mailul folosesc acum versiunea editată',
+            ...(elsewhere ? { actionLabel: 'Vezi procesul-verbal', recordId: id } : {}),
+          });
+          resolve(doc);
+        },
+        error: (e) => {
+          this.set(id, previous);
+          this.toasts.error('Salvarea procesului-verbal a eșuat', toApiError(e).message);
+          resolve(null);
+        },
+      }),
+    );
   }
 
   private set(id: ID, state: MinutesState): void {

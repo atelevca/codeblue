@@ -1,6 +1,19 @@
-import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FindingKind, Job, TranscriptResult } from '../../api/models';
+import type Quill from 'quill';
+import { FindingKind, Job, QuillOp, TranscriptResult } from '../../api/models';
 import { CodeBlueApi, toApiError } from '../../api/codeblue-api';
 import { speakerColor, typeInfo } from '../../shared/catalog';
 import { fmtDate, fmtDur, fmtLongDate } from '../../shared/format';
@@ -20,6 +33,18 @@ const LANGS = [
   { code: 'RO', label: 'Română' },
   { code: 'RU', label: 'Русский' },
   { code: 'EN', label: 'English' },
+];
+
+/** The formats the backend accepts in a saved delta (see HealthTech/Documents/README.md). */
+const QUILL_FORMATS = ['header', 'bold', 'italic', 'underline', 'list', 'indent', 'align', 'link'];
+const QUILL_TOOLBAR = [
+  [{ header: [1, 2, 3, false] }],
+  ['bold', 'italic', 'underline'],
+  [{ list: 'ordered' }, { list: 'bullet' }],
+  [{ indent: '-1' }, { indent: '+1' }],
+  [{ align: [] }],
+  ['link'],
+  ['clean'],
 ];
 
 const KIND_LABELS: Record<FindingKind, string> = {
@@ -50,6 +75,10 @@ export class MomView implements OnInit {
   protected readonly emailOpen = signal(false);
   protected readonly mappingExpanded = signal(false);
   protected readonly transcriptOpen = signal(false);
+  protected readonly editing = signal(false);
+  private readonly editorHost = viewChild<ElementRef<HTMLDivElement>>('editor');
+  private quill: Quill | null = null;
+  private quillCtor: typeof Quill | null = null;
   protected readonly langs = LANGS;
   protected readonly lang = signal('RO');
   private readonly now = signal(Date.now());
@@ -59,8 +88,9 @@ export class MomView implements OnInit {
   protected readonly state = computed(() => this.minutes.of(this.record().id));
   protected readonly doc = computed(() => {
     const s = this.state();
-    return s.kind === 'ready' ? s.doc : null;
+    return s.kind === 'ready' || s.kind === 'saving' ? s.doc : null;
   });
+  protected readonly saving = computed(() => this.state().kind === 'saving');
   protected readonly errorState = computed(() => {
     const s = this.state();
     return s.kind === 'error' ? s : null;
@@ -69,7 +99,9 @@ export class MomView implements OnInit {
 
   protected readonly elapsed = computed(() => {
     const s = this.state();
-    return s.kind === 'generating' ? fmtDur((this.now() - s.startedAt) / 1000) : '';
+    return s.kind === 'generating' || s.kind === 'saving'
+      ? fmtDur((this.now() - s.startedAt) / 1000)
+      : '';
   });
 
   private readonly speakerCount = computed(
@@ -123,16 +155,16 @@ export class MomView implements OnInit {
     const label = v.pending
       ? 'Verificarea automată este în curs — documentul poate fi consultat, dar nu este încă verificat'
       : !v.completed
-      ? 'Verificarea automată nu a fost finalizată — documentul nu este verificat'
-      : v.isConsistent
-        ? 'Verificat: nicio neconcordanță cu transcrierea'
-        : partialClean
-          ? 'Verificat pe fragmente: nicio neconcordanță; afirmațiile fără suport nu au fost verificate'
-          : v.findings.length === 0
-            ? `Verificare neconcludentă: ${v.discardedFindings} constatări fără citat regăsit — necesită revizuire`
-            : v.findings.length === 1
-              ? '1 neconcordanță cu transcrierea'
-              : `${v.findings.length} neconcordanțe cu transcrierea`;
+        ? 'Verificarea automată nu a fost finalizată — documentul nu este verificat'
+        : v.isConsistent
+          ? 'Verificat: nicio neconcordanță cu transcrierea'
+          : partialClean
+            ? 'Verificat pe fragmente: nicio neconcordanță; afirmațiile fără suport nu au fost verificate'
+            : v.findings.length === 0
+              ? `Verificare neconcludentă: ${v.discardedFindings} constatări fără citat regăsit — necesită revizuire`
+              : v.findings.length === 1
+                ? '1 neconcordanță cu transcrierea'
+                : `${v.findings.length} neconcordanțe cu transcrierea`;
     return {
       tone,
       label,
@@ -171,6 +203,29 @@ export class MomView implements OnInit {
   constructor() {
     const timer = setInterval(() => this.now.set(Date.now()), 1000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
+    // The editor host exists only while editing; Quill is created when it appears and filled
+    // with the saved delta, and dropped with it.
+    effect(() => {
+      const host = this.editorHost()?.nativeElement;
+      if (!host) {
+        this.quill = null;
+        return;
+      }
+      const Ctor = this.quillCtor;
+      if (!Ctor || this.quill?.container === host) return;
+      const quill = new Ctor(host, {
+        theme: 'snow',
+        formats: QUILL_FORMATS,
+        modules: { toolbar: QUILL_TOOLBAR },
+      });
+      const delta = untracked(this.doc)?.delta;
+      if (delta) quill.setContents(delta.ops, 'api');
+      this.quill = quill;
+    });
+    // A regeneration or a load error takes the document away: leave edit mode with it.
+    effect(() => {
+      if (!this.doc()) this.editing.set(false);
+    });
   }
 
   ngOnInit(): void {
@@ -185,6 +240,32 @@ export class MomView implements OnInit {
   protected generate(): void {
     this.download.set('idle');
     this.minutes.generate(this.record().id, this.title());
+  }
+
+  /** Quill is loaded on demand: most visits only read the document. */
+  protected async startEdit(): Promise<void> {
+    if (!this.doc() || this.saving() || this.editing()) return;
+    if (!this.quillCtor) this.quillCtor = (await import('quill')).default;
+    this.editing.set(true);
+  }
+
+  protected cancelEdit(): void {
+    this.editing.set(false);
+  }
+
+  /** Sends the full editor snapshot; the backend verifies it and the PDF is rendered from it. */
+  protected async saveEdit(): Promise<void> {
+    const quill = this.quill;
+    if (!quill || this.saving()) return;
+    const delta = { ops: quill.getContents().ops as QuillOp[] };
+    quill.enable(false);
+    const saved = await this.minutes.saveEdit(this.record().id, delta, this.title());
+    if (saved) {
+      this.editing.set(false);
+      this.download.set('idle');
+    } else if (this.quill === quill) {
+      quill.enable(true);
+    }
   }
 
   protected exportPdf(): void {

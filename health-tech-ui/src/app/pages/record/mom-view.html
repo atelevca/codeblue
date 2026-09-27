@@ -61,7 +61,17 @@
       <div class="doc__eyebrow mono">Proces-verbal · {{ typeLabel() }}</div>
       <div style="display: flex; align-items: center; gap: 10px">
         @if (doc()) {
-          <button class="btn btn--ghost regen" (click)="generate()">Regenerează</button>
+          @if (editing()) {
+            <button class="btn btn--ghost regen" [disabled]="saving()" (click)="cancelEdit()">
+              Anulează
+            </button>
+            <button class="btn btn--dark regen" [disabled]="saving()" (click)="saveEdit()">
+              {{ saving() ? 'Se salvează…' : 'Salvează' }}
+            </button>
+          } @else {
+            <button class="btn btn--ghost regen" (click)="startEdit()">Editează</button>
+            <button class="btn btn--ghost regen" (click)="generate()">Regenerează</button>
+          }
         }
         <div class="seg" role="group" aria-label="Limba procesului-verbal">
           @for (l of langs; track l.code) {
@@ -85,33 +95,50 @@
 
     <div class="sep"></div>
 
-    @switch (state().kind) {
-      @case ('ready') {
-        @if (verification(); as v) {
-          <div [class]="'verify verify--' + v.tone">
-            <div class="verify__label">{{ v.label }}</div>
-            @if (v.summary) {
-              <div class="verify__summary">{{ v.summary }}</div>
-            }
-            @for (f of v.findings; track $index) {
-              <div class="finding">
-                <div class="finding__kind mono">{{ f.kindLabel }}@if (f.section) { · {{ f.section }}}</div>
-                <div>{{ f.description }}</div>
-                @if (f.documentQuote) {
-                  <div class="finding__quote"><b>Document:</b> „{{ f.documentQuote }}”</div>
-                }
-                @if (f.transcriptQuote) {
-                  <div class="finding__quote"><b>Transcriere:</b> „{{ f.transcriptQuote }}”</div>
-                }
-                @if (f.suggestedCorrection) {
-                  <div class="finding__quote">
-                    <b>Corectură propusă:</b> {{ f.suggestedCorrection }}
-                  </div>
+    @if (doc()) {
+      @if (verification(); as v) {
+        <div [class]="'verify verify--' + v.tone">
+          <div class="verify__label">{{ v.label }}</div>
+          @if (v.summary) {
+            <div class="verify__summary">{{ v.summary }}</div>
+          }
+          @for (f of v.findings; track $index) {
+            <div class="finding">
+              <div class="finding__kind mono">
+                {{ f.kindLabel }}
+                @if (f.section) {
+                  · {{ f.section }}
                 }
               </div>
-            }
+              <div>{{ f.description }}</div>
+              @if (f.documentQuote) {
+                <div class="finding__quote"><b>Document:</b> „{{ f.documentQuote }}”</div>
+              }
+              @if (f.transcriptQuote) {
+                <div class="finding__quote"><b>Transcriere:</b> „{{ f.transcriptQuote }}”</div>
+              }
+              @if (f.suggestedCorrection) {
+                <div class="finding__quote">
+                  <b>Corectură propusă:</b> {{ f.suggestedCorrection }}
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+      @if (editing()) {
+        <div class="editor-hint">
+          Modificați textul mai jos și apăsați „Salvează”: documentul este verificat din nou cu
+          transcrierea (durează câteva minute), iar PDF-ul și e-mailul vor conține modificările.
+        </div>
+        <div class="editor" #editor></div>
+        @if (saving()) {
+          <div class="loading">
+            <span class="dot pulse" style="background: var(--accent-2)"></span>Se verifică și se
+            salvează procesul-verbal · <span class="mono">{{ elapsed() }}</span>
           </div>
         }
+      } @else {
         <div class="md-doc">
           @for (l of lines(); track $index) {
             <div [class]="'md md--' + l.kind" [style.margin-left.px]="l.indent * 20">
@@ -135,53 +162,56 @@
           }
         </div>
       }
-      @case ('missing') {
-        <div class="gen">
-          <div style="font-weight: 500; font-size: 15px">
-            Procesul-verbal nu a fost generat încă
+    } @else {
+      @switch (state().kind) {
+        @case ('missing') {
+          <div class="gen">
+            <div style="font-weight: 500; font-size: 15px">
+              Procesul-verbal nu a fost generat încă
+            </div>
+            <div class="gen__hint">
+              Generarea durează 6–10 minute: modelul extrage faptele din transcriere, redactează
+              documentul și îl verifică cu transcrierea. Puteți naviga în aplicație între timp — vă
+              anunțăm când este gata.
+            </div>
+            <button class="btn btn--dark" style="margin-top: 14px" (click)="generate()">
+              Generează procesul-verbal
+            </button>
           </div>
-          <div class="gen__hint">
-            Generarea durează 6–10 minute: modelul extrage faptele din transcriere, redactează
-            documentul și îl verifică cu transcrierea. Puteți naviga în aplicație între timp — vă
-            anunțăm când este gata.
-          </div>
-          <button class="btn btn--dark" style="margin-top: 14px" (click)="generate()">
-            Generează procesul-verbal
-          </button>
-        </div>
-      }
-      @case ('generating') {
-        <div class="gen">
-          <div style="display: flex; align-items: center; gap: 8px; font-weight: 500">
-            <span class="dot pulse" style="background: var(--accent-2)"></span>Se generează
-            procesul-verbal · <span class="mono">{{ elapsed() }}</span>
-          </div>
-          <div class="gen__hint">
-            De obicei durează 6–10 minute. Puteți naviga în aplicație, dar nu reîncărcați pagina:
-            generarea s-ar întrerupe.
-          </div>
-        </div>
-      }
-      @case ('error') {
-        @if (errorState(); as s) {
-          <div class="alert-error">
-            <div class="alert-error__icon">!</div>
-            <div style="flex: 1">
-              <div class="alert-error__msg" style="margin: 0">{{ s.message }}</div>
-              @if (s.canGenerate) {
-                <button class="btn" style="margin-top: 10px" (click)="generate()">
-                  Încearcă din nou
-                </button>
-              }
+        }
+        @case ('generating') {
+          <div class="gen">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+              <span class="dot pulse" style="background: var(--accent-2)"></span>Se generează
+              procesul-verbal · <span class="mono">{{ elapsed() }}</span>
+            </div>
+            <div class="gen__hint">
+              De obicei durează 6–10 minute. Puteți naviga în aplicație, dar nu reîncărcați pagina:
+              generarea s-ar întrerupe.
             </div>
           </div>
         }
-      }
-      @default {
-        <div class="loading">
-          <span class="dot pulse" style="background: var(--accent-2)"></span>Se încarcă
-          procesul-verbal…
-        </div>
+        @case ('error') {
+          @if (errorState(); as s) {
+            <div class="alert-error">
+              <div class="alert-error__icon">!</div>
+              <div style="flex: 1">
+                <div class="alert-error__msg" style="margin: 0">{{ s.message }}</div>
+                @if (s.canGenerate) {
+                  <button class="btn" style="margin-top: 10px" (click)="generate()">
+                    Încearcă din nou
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        }
+        @default {
+          <div class="loading">
+            <span class="dot pulse" style="background: var(--accent-2)"></span>Se încarcă
+            procesul-verbal…
+          </div>
+        }
       }
     }
   </article>
@@ -199,7 +229,7 @@
         class="download"
         [class.done]="download() === 'done'"
         [class.busy]="download() === 'preparing'"
-        [disabled]="!doc()"
+        [disabled]="!doc() || saving()"
         (click)="exportPdf()"
       >
         <svg
@@ -230,7 +260,7 @@
           margin-top: 8px;
         "
       >
-        <button class="btn side-btn" [disabled]="!doc()" (click)="emailOpen.set(true)">
+        <button class="btn side-btn" [disabled]="!doc() || saving()" (click)="emailOpen.set(true)">
           <svg
             width="14"
             height="14"

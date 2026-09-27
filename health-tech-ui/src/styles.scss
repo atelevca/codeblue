@@ -1039,3 +1039,105 @@ a {
     }
   }
 }
+
+// ---- Minutes editor (Quill "snow" theme, restyled to the document look) ----
+
+.editor {
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  min-height: 320px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #2a2a27;
+  font-family: inherit;
+
+  .ql-editor {
+    min-height: 320px;
+    padding: 20px 22px;
+    font-size: inherit;
+    line-height: inherit;
+    text-wrap: pretty;
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-top: 24px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-top: 22px;
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 16px;
+    }
+    a {
+      color: var(--accent-ink);
+    }
+    &.ql-blank::before {
+      color: var(--text-3);
+      font-style: normal;
+    }
+  }
+}
+.ql-toolbar.ql-snow {
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  background: var(--subtle);
+  font-family: inherit;
+  position: sticky;
+  top: 64px;
+  z-index: 2;
+
+  .ql-picker,
+  .ql-picker-label {
+    font-family: inherit;
+  }
+  .ql-picker-options {
+    border-radius: 10px;
+    border-color: var(--line);
+  }
+  .ql-stroke {
+    stroke: var(--text-2);
+  }
+  .ql-fill {
+    fill: var(--text-2);
+  }
+  button:hover .ql-stroke,
+  button.ql-active .ql-stroke,
+  .ql-picker-label:hover .ql-stroke,
+  .ql-picker-label.ql-active .ql-stroke {
+    stroke: var(--accent-2);
+  }
+  button:hover .ql-fill,
+  button.ql-active .ql-fill {
+    fill: var(--accent-2);
+  }
+  button:hover,
+  button.ql-active,
+  .ql-picker-label:hover,
+  .ql-picker-label.ql-active,
+  .ql-picker-item:hover,
+  .ql-picker-item.ql-selected {
+    color: var(--accent-2);
+  }
+}
+.ql-container.ql-snow {
+  border: none;
+  font-family: inherit;
+}
+.ql-snow .ql-tooltip {
+  border-radius: 10px;
+  border-color: var(--line);
+  box-shadow: 0 4px 16px rgba(20, 20, 15, 0.1);
+  font-family: inherit;
+  z-index: 3;
+}
+.ql-container.ql-disabled .ql-editor {
+  opacity: 0.6;
+  cursor: progress;
+}
